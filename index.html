@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>バーコードバトラー</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#30363d;--fg:#e6edf3;--dim:#8b949e;--acc:#f0b429;--hp:#3fb950;--hp2:#d29922;--hp3:#f85149;--me:#58a6ff;--foe:#ff7b72}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;touch-action:manipulation}
+body{padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);max-width:520px;margin:0 auto;min-height:100dvh}
+h1{font-size:22px;margin:16px 0 4px;letter-spacing:.05em;color:var(--acc)}
+.sub{color:var(--dim);font-size:13px;margin:0 0 16px}
+.screen{display:none}.screen.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px}
+.card h2{font-size:14px;margin:0 0 8px;color:var(--dim);font-weight:600}
+input[type=text]{width:100%;padding:12px;font-size:18px;letter-spacing:.08em;border-radius:8px;border:1px solid var(--line);background:#0d1117;color:var(--fg)}
+.row{display:flex;gap:8px;margin:8px 0}
+button{font:inherit;color:var(--fg);background:#21262d;border:1px solid var(--line);border-radius:10px;padding:11px 12px;min-height:44px;flex:1;cursor:pointer}
+button:active{filter:brightness(1.3)}
+button.pri{background:var(--acc);color:#1a1300;border-color:var(--acc);font-weight:700}
+button:disabled{opacity:.35}
+.bar{display:block;width:100%;height:36px;margin-top:8px;background:#fff;border-radius:6px}
+.stat{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:8px;text-align:center;font-size:12px;color:var(--dim)}
+.stat b{display:block;font-size:16px;color:var(--fg)}
+.nm{font-size:17px;font-weight:700;margin:8px 0 2px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;background:#21262d;border:1px solid var(--line);color:var(--dim);margin-right:4px}
+.info{color:var(--acc);font-size:13px;min-height:0;margin:4px 0 0}
+.warn{color:var(--hp3);font-size:13px;min-height:18px;margin:4px 0 0}
+.fighter{position:relative}
+.hpwrap{height:12px;background:#0d1117;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.hpbar{height:100%;background:var(--hp);width:100%;transition:width .5s}
+.fighter .top{display:flex;justify-content:space-between;align-items:baseline;font-size:14px}
+.fighter .emo{font-size:40px;line-height:1;text-align:center;transition:transform .15s}
+.hit .emo{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.pop{position:absolute;left:50%;top:10px;transform:translateX(-50%);font-weight:800;font-size:28px;pointer-events:none;animation:pop 1s forwards;text-shadow:0 2px 0 #000}
+@keyframes pop{to{top:-20px;opacity:0}}
+.log{background:#010409;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;min-height:112px;line-height:1.6;margin-bottom:12px}
+.log div:last-child{color:var(--acc);font-weight:600}
+.starline{text-align:center;font-size:13px;color:var(--dim);margin-bottom:8px}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mask{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;z-index:10;padding:16px}
+.mask.on{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;width:100%;max-width:420px;max-height:85dvh;overflow:auto}
+.meter{position:relative;height:36px;background:#21262d;border-radius:8px;margin:16px 0;overflow:hidden}
+.meter .sweet{position:absolute;left:35%;width:30%;top:0;bottom:0;background:#3fb95044}
+.meter .mid{position:absolute;left:49%;width:2%;top:0;bottom:0;background:var(--hp)}
+.meter .mk{position:absolute;top:0;bottom:0;width:6px;margin-left:-3px;background:var(--acc)}
+video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover}
+.lib button{text-align:left;margin-bottom:6px}
+.big{font-size:56px;text-align:center;margin:8px 0}
+.small{font-size:12px;color:var(--dim)}
+.stkwrap{width:min(100%,260px);aspect-ratio:1;margin:4px auto 8px;border-radius:14px;overflow:hidden;background:#0d1117}
+.sticker{width:100%;height:100%;display:block}
+.frow{display:flex;gap:10px;align-items:center}
+.stk{width:104px;height:104px;flex:none;border-radius:10px;overflow:hidden;background:#0d1117}
+.finfo{flex:1;min-width:0}
+.finfo .small{margin-top:3px}
+</style>
+</head>
+<body>
+
+<!-- ホーム -->
+<section id="home" class="screen on">
+  <h1>📟 バーコードバトラー</h1>
+  <p class="sub">身の回りのバーコードが戦士になる。商品のバーコードを読み取って対戦しよう。</p>
+
+  <div class="row" style="align-items:center">
+    <select id="profSel" style="flex:2;min-height:44px;border-radius:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);padding:0 10px;font:inherit"></select>
+    <button id="btnNewProf">＋ 家族を追加</button>
+  </div>
+
+  <div class="card" id="slotChar">
+    <h2>① 戦士のバーコード（必須）</h2>
+    <input type="text" id="inChar" inputmode="numeric" placeholder="45/49で始まる商品のJAN" maxlength="13">
+    <div class="row">
+      <button data-scan="char">📷 スキャン</button>
+      <button data-rand="char">🎲 ランダム</button>
+      <button data-lib="char">📚 図鑑</button>
+    </div>
+    <div class="warn" id="wChar"></div>
+    <div class="info" id="iChar"></div>
+    <div id="pvChar"></div>
+  </div>
+
+  <div class="card" id="slotItem">
+    <h2>② アイテムのバーコード（任意）</h2>
+    <input type="text" id="inItem" inputmode="numeric" placeholder="9784で始まる書籍のJAN" maxlength="13">
+    <div class="row">
+      <button data-scan="item">📷 スキャン</button>
+      <button data-rand="item">🎲 ランダム</button>
+      <button data-clear="item">✕ なし</button>
+    </div>
+    <div class="warn" id="wItem"></div>
+    <div id="pvItem"></div>
+  </div>
+
+  <div class="row">
+    <button class="pri" id="btnStart" disabled>⚔ 対戦開始</button>
+  </div>
+  <div class="row"><button id="btnHelp">📖 あそびかた</button></div>
+</section>
+
+<!-- 対戦 -->
+<section id="battle" class="screen">
+  <div class="starline" id="starLine"></div>
+  <div class="card fighter" id="foeCard"></div>
+  <div class="log" id="log"></div>
+  <div class="card fighter" id="meCard"></div>
+  <div class="acts" id="acts"></div>
+</section>
+
+<!-- 結果 -->
+<section id="result" class="screen">
+  <div class="big" id="resEmo"></div>
+  <h1 id="resTitle" style="text-align:center"></h1>
+  <p class="sub" id="resSub" style="text-align:center"></p>
+  <div class="row"><button class="pri" id="btnAgain">もう一度（同じ戦士）</button></div>
+  <div class="row"><button id="btnHome">戦士を選び直す</button></div>
+</section>
+
+<!-- スキャンモーダル -->
+<div class="mask" id="scanMask"><div class="modal">
+  <h2 style="margin:0 0 8px;font-size:16px">バーコードを写してください</h2>
+  <video id="video" playsinline muted></video>
+  <p class="small" id="scanMsg"></p>
+  <div class="row"><button id="scanClose">閉じる</button></div>
+</div></div>
+
+<!-- 履歴モーダル -->
+<div class="mask" id="libMask"><div class="modal">
+  <h2 style="margin:0 0 8px;font-size:16px">図鑑（育てた戦士）</h2>
+  <div class="lib" id="libList"></div>
+  <div class="row"><button id="libClose">閉じる</button></div>
+</div></div>
+
+<!-- タイミング / メニュー / ヘルプ 共用モーダル -->
+<div class="mask" id="modalMask"><div class="modal" id="modalBody"></div></div>
+
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
