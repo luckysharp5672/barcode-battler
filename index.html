@@ -57,6 +57,18 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 .stk{width:104px;height:104px;flex:none;border-radius:10px;overflow:hidden;background:#0d1117}
 .finfo{flex:1;min-width:0}
 .finfo .small{margin-top:3px}
+.reward{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;opacity:0;transform:translateY(10px);animation:rin .5s forwards;animation-delay:var(--d)}
+@keyframes rin{to{opacity:1;transform:none}}
+.reward .ic{font-size:30px;flex:none;width:48px;text-align:center}
+.reward .rb{flex:1;min-width:0}
+.reward .rt{font-size:15px}.reward .rt b{font-size:20px;color:var(--acc)}
+.reward .rn{font-size:17px;font-weight:700;margin:2px 0}
+.reward.none{opacity:.55}
+.reward.drop{border-color:var(--acc);box-shadow:0 0 14px #f0b42955}
+.reward .rimg{width:84px;height:84px;flex:none;border-radius:10px;overflow:hidden;background:#0d1117}
+.xpbar{height:8px;background:#0d1117;border-radius:4px;overflow:hidden;border:1px solid var(--line);margin-top:6px}
+.xpbar>div{height:100%;background:linear-gradient(90deg,#58a6ff,#a371f7)}
+.lvup{color:#3fb950;font-weight:700;margin-top:6px}
 </style>
 </head>
 <body>
@@ -70,6 +82,7 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
     <select id="profSel" style="flex:2;min-height:44px;border-radius:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);padding:0 10px;font:inherit"></select>
     <button id="btnNewProf">＋ 家族を追加</button>
   </div>
+  <div class="small" id="wallet" style="margin:-2px 0 10px"></div>
 
   <div class="card" id="slotChar">
     <h2>① 戦士のバーコード（必須）</h2>
@@ -90,7 +103,8 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
     <div class="row">
       <button data-scan="item">📷 スキャン</button>
       <button data-rand="item">🎲 ランダム</button>
-      <button data-clear="item">✕ なし</button>
+      <button data-bag="item">🎒 持ち物</button>
+      <button data-clear="item">✕</button>
     </div>
     <div class="warn" id="wItem"></div>
     <div class="info" id="iItem"></div>
@@ -117,6 +131,7 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   <div class="big" id="resEmo"></div>
   <h1 id="resTitle" style="text-align:center"></h1>
   <p class="sub" id="resSub" style="text-align:center"></p>
+  <div id="rewards"></div>
   <div class="row"><button class="pri" id="btnAgain">もう一度（同じ戦士）</button></div>
   <div class="row"><button id="btnHome">戦士を選び直す</button></div>
 </section>

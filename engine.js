@@ -218,11 +218,34 @@
     return healed;
   }
 
+  // ---- 対戦の報酬 ----
+  // お金: 勝つと 50+10×敵Lv（±20%）、負けると10（±20%）
+  const rewardMoney = (win, foeLv, rng) => Math.round((win ? 50 + 10 * foeLv : 10) * (0.8 + rng() * 0.4));
+  // アイテムのドロップ: 勝つと12%、負けると3%。格が低いもの・回復薬ほど出やすい
+  const dropWeight = (it) => {
+    const e = it.effect;
+    if (e.unique) return 1;
+    if (e.kind === 'consumable') return e.heal_hp_pct === 100 ? 1 : 3;
+    return { 1: 4, 2: 3, 3: 2, 4: 1 }[e.tier] || 1;
+  };
+  function rollDrop(win, rng) {
+    if (rng() >= (win ? 0.12 : 0.03)) return null;
+    const total = DATA.items.reduce((a, it) => a + dropWeight(it), 0);
+    let r = rng() * total;
+    for (const it of DATA.items) { r -= dropWeight(it); if (r < 0) return it.id; }
+    return DATA.items[0].id;
+  }
+  // アイテムID → アイテム（バーコードなしで持ち物から使うとき）
+  function itemById(id) {
+    const it = DATA.items.find((x) => x.id === id);
+    return it ? { kind: 'item', code: '', prefix: '', itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) } : null;
+  }
+
   const api = {
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
     MAX_LV, START_LIMIT, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    healAmount, powerHeal, useConsumable, fatigue, DATA,
+    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, DATA,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BB = api;

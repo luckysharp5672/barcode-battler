@@ -9,6 +9,7 @@
   let cur = null;  // 現在の家族プロフィールID
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
   let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
+  let player = { money: 0, bag: {} }; // お金と持ち物
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -47,7 +48,8 @@
     $('profSel').innerHTML = list.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>👤 ${p.name}</option>`).join('');
     dex = await Store.getDex(cur);
     daily = await Store.getDaily(cur);
-    updateRandButtons();
+    player = await Store.getPlayer(cur);
+    updateRandButtons(); renderWallet();
     // 現在のルールで無効なデータは表示しない（保存データは消さない）。名前・限界は最新のデータに合わせる
     Object.keys(dex).forEach((c) => {
       const d = BB.decode(c);
@@ -126,7 +128,7 @@
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
-      <div class="nm">🎁 ${d.name}</div><div class="small">${d.text}</div>${barSvg(d.code)}`;
+      <div class="nm">🎁 ${d.name}</div><div class="small">${d.text}</div>${d.code ? barSvg(d.code) : '<div class="small">🎒 持ち物から（使うと1個へります）</div>'}`;
   }
 
   // ---------- ホーム ----------
@@ -137,6 +139,7 @@
     $('in' + cap).value = s.code;
     s.dec = null;
     s.status = null;
+    s.bagId = null;
     $('w' + cap).textContent = '';
     $('pv' + cap).innerHTML = '';
     $('i' + cap).textContent = '';
@@ -191,6 +194,28 @@
     el.textContent = el.textContent ? note + '　' + el.textContent : note;
   }
   document.querySelectorAll('[data-rand]').forEach((b) => b.onclick = () => onRandom(b.dataset.rand));
+  // 持ち物：お金とアイテム
+  const bagCount = () => Object.values(player.bag).reduce((a, b) => a + b, 0);
+  function renderWallet() { $('wallet').textContent = `💰 ${player.money.toLocaleString()}　🎒 持ち物 ${bagCount()}個`; }
+  async function savePlayer() { await Store.setPlayer(cur, player); renderWallet(); }
+  function setBagItem(id) {
+    setSlot('item', '');
+    const dec = BB.itemById(id), s = slots.item;
+    s.dec = dec; s.bagId = id;
+    $('pvItem').innerHTML = previewHtml(dec, 'Item');
+    makeSticker(dec).then((c) => { const box = $('stkItem'); if (box && s.dec === dec) box.appendChild(c); });
+    $('iItem').textContent = '🎒 持ち物から使います（対戦開始で1個へります）';
+    $('btnStart').disabled = !slots.char.dec;
+  }
+  async function openBag() {
+    const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
+    if (!ids.length) { await choose('持ち物', [{ label: 'まだありません。対戦に勝つと、まれに手に入ります', value: 0, disabled: true }, { label: '← 戻る', value: 0 }]); return; }
+    const opts = ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name} ×${player.bag[id]}<br><span class="small">${d.text}</span>`, value: id }; });
+    opts.push({ label: '← 戻る', value: 0 });
+    const id = await choose('持ち物（使うと1個へります）', opts);
+    if (id) setBagItem(id);
+  }
+  document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
   document.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => setSlot(b.dataset.clear, ''));
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
   document.querySelectorAll('[data-scan]').forEach((b) => b.onclick = () => openScan(b.dataset.scan));
@@ -346,8 +371,8 @@
     return BB.makeFighter(ch, it, Math.min(ch.limit, 1 + Math.floor(rng() * Math.max(3, myLv + 2))));
   }
 
-  async function startBattle(chDec, itDec) {
-    last = { chDec, itDec };
+  async function startBattle(chDec, itDec, bagId) {
+    last = { chDec, itDec, bagId };
     const myLv = levelOf(chDec.code);
     me = BB.makeFighter(chDec, itDec, myLv); foe = newFoe(myLv);
     [me.canvas, foe.canvas] = await Promise.all([makeSticker(me, 256), makeSticker(foe, 256)]);
@@ -369,18 +394,47 @@
     const win = me.hp > 0;
     $('resEmo').textContent = win ? '🏆' : '💀';
     $('resTitle').textContent = win ? 'しょうり！' : 'はいぼく…';
+    $('resSub').textContent = win ? `${foe.name} を倒した` : `${foe.name} に倒された`;
+    // 報酬：経験値・お金・まれにアイテム
     const e = dex[chDec.code], oldLv = e.level, oldXp = e.xp;
     e.xp = Math.min(e.xp + (win ? 30 + 5 * foe.level : 10), BB.xpForLevel(e.maxLv));
     const gain = e.xp - oldXp;
     e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
     await Store.saveFighter(cur, e);
-    const lvUp = e.level > oldLv ? `\n🎉 レベルアップ！ Lv${oldLv} → Lv${e.level}` : '';
-    const limitMsg = e.maxLv < e.limit
-      ? `Lv${e.level}（限界です。同じシールの別ロットのバーコードで限界Lv+${BB.LOT_STEP}。キラキラの上限は Lv${e.limit}）`
-      : `Lv${e.level}（キラキラの最大 Lv${e.limit} です）`;
-    $('resSub').style.whiteSpace = 'pre-line';
-    $('resSub').textContent = `${win ? foe.name + ' を倒した' : foe.name + ' に倒された'}\n${e.level >= e.maxLv ? limitMsg : `経験値 +${gain}（Lv${e.level}  次まで ${BB.xpForLevel(e.level + 1) - e.xp}）`}${lvUp}`;
+    const gold = BB.rewardMoney(win, foe.level, rng);
+    player.money += gold;
+    const dropId = BB.rollDrop(win, rng);
+    if (dropId) player.bag[dropId] = (player.bag[dropId] || 0) + 1;
+    await savePlayer();
     show('result');
+    renderRewards({ gain, oldLv, e, gold, drop: dropId ? BB.itemById(dropId) : null });
+  }
+
+  // 報酬画面：経験値 → お金 → アイテム の順に、ひとつずつ現れる
+  function renderRewards(r) {
+    const box = $('rewards'); box.innerHTML = '';
+    let delay = 0.2;
+    const add = (html, cls = '') => {
+      const el = document.createElement('div');
+      el.className = 'reward ' + cls; el.style.setProperty('--d', delay + 's'); delay += 0.5;
+      el.innerHTML = html; box.appendChild(el); return el;
+    };
+    const e = r.e, capped = e.level >= e.maxLv;
+    const base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
+    const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
+    const note = !capped ? `次のレベルまで あと ${need - (e.xp - base)}`
+      : (e.maxLv < e.limit ? `限界です。同じシールの別ロットのバーコードで限界Lv+${BB.LOT_STEP}（キラキラの上限 Lv${e.limit}）` : `キラキラの最大 Lv${e.limit} です`);
+    add(`<div class="ic">⭐</div><div class="rb"><div class="rt">経験値 <b>+${r.gain}</b></div>
+      <div class="small">Lv${e.level}　${note}</div><div class="xpbar"><div style="width:${pct}%"></div></div>
+      ${e.level > r.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${r.oldLv} → Lv${e.level}</div>` : ''}</div>`);
+    add(`<div class="ic">💰</div><div class="rb"><div class="rt">お金 <b>+${r.gold.toLocaleString()}</b></div><div class="small">所持金 ${player.money.toLocaleString()}</div></div>`);
+    if (r.drop) {
+      const el = add(`<div class="rimg"></div><div class="rb"><div class="rt">🎁 アイテムを手に入れた！</div><div class="rn">${r.drop.name}</div>
+        <div class="small">${r.drop.text}</div><div class="small">🎒 持ち物に入りました（${player.bag[r.drop.itemId]}個）</div></div>`, 'drop');
+      makeSticker(r.drop, 192).then((c) => el.querySelector('.rimg').appendChild(c));
+    } else {
+      add('<div class="ic">🎁</div><div class="rb"><div class="rt">アイテム</div><div class="small">今回はなし（まれに手に入ります）</div></div>', 'none');
+    }
   }
 
   const effText = (m) => (m >= 1.5 ? '効果は抜群！' : m <= 0.5 ? '効果はいまひとつ…' : m < 1 ? 'あまり効かない…' : '');
@@ -479,12 +533,25 @@
   }
 
   // ---------- ボタン ----------
+  // 持ち物のアイテムで対戦するときは、1個へらす（0個なら使わずに対戦）
+  async function spendBag(id) {
+    if (!id || !(player.bag[id] > 0)) return false;
+    player.bag[id]--; if (player.bag[id] <= 0) delete player.bag[id];
+    await savePlayer();
+    return true;
+  }
   $('btnStart').onclick = async () => {
     $('btnStart').disabled = true;
     await commitChar();
-    startBattle(slots.char.dec, slots.item.dec);
+    const bagId = slots.item.bagId;
+    const used = await spendBag(bagId);
+    if (bagId && !used) setSlot('item', '');
+    startBattle(slots.char.dec, used ? slots.item.dec : (bagId ? null : slots.item.dec), used ? bagId : null);
   };
-  $('btnAgain').onclick = () => startBattle(last.chDec, last.itDec);
+  $('btnAgain').onclick = async () => {
+    const used = await spendBag(last.bagId);
+    startBattle(last.chDec, last.bagId ? (used ? last.itDec : null) : last.itDec, used ? last.bagId : null);
+  };
   $('btnHome').onclick = () => { setSlot('char', slots.char.code); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）の先頭9桁から、戦士の「シール」が決まります（③④は使いません）。先頭が45・49の商品が戦士（45と49は同じ扱い）、9784の書籍がアイテムです。それ以外は使えません。<br>
@@ -494,6 +561,7 @@
     ・攻撃は<b>タイミングメーター</b>を中央で止めるほどダメージ最大2倍。特殊技は防御無視・必中で3ターンに1回。<br>
     ・薬草は3個。「薬草」は確実に回復、「パワーキー」は薬草1個で運とタイミング次第の大回復。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけ（2回目からは今日のコードを入れ直すだけ）。<br>
+    ・戦いのあとに、経験値・お金・まれにアイテム（12%。負けても3%）がもらえます。アイテムは「🎒 持ち物」から使えます（使うと1個へります）。<br>
     ・書籍のアイテムは武器・防具・アクセサリー（能力アップなど）か、使い切りの回復薬。<br>
     ・先にHPが0になった方の負けです。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
