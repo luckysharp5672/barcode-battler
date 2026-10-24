@@ -20,5 +20,11 @@
       const d = read(); if (!d.profiles[pid]) return;
       d.profiles[pid].dex[entry.code] = entry; write(d);
     },
+    // 今日のランダム（戦士・アイテムそれぞれ1日1回）の記録 { char: {date, code}, item: {date, code} }
+    async getDaily(pid) { const p = read().profiles[pid]; return p && p.daily ? p.daily : {}; },
+    async setDaily(pid, kind, entry) {
+      const d = read(); if (!d.profiles[pid]) return;
+      d.profiles[pid].daily = { ...(d.profiles[pid].daily || {}), [kind]: entry }; write(d);
+    },
   };
 })(window);

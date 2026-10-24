@@ -8,6 +8,7 @@
   let last = null; // 再戦用 { chDec, itDec }
   let cur = null;  // 現在の家族プロフィールID
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
+  let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -45,6 +46,8 @@
     cur = (await Store.getCurrent()) || list[0].id;
     $('profSel').innerHTML = list.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>👤 ${p.name}</option>`).join('');
     dex = await Store.getDex(cur);
+    daily = await Store.getDaily(cur);
+    updateRandButtons();
     // 現在のルールで無効なデータは表示しない（保存データは消さない）。名前・限界は最新のデータに合わせる
     Object.keys(dex).forEach((c) => {
       const d = BB.decode(c);
@@ -136,7 +139,7 @@
     s.status = null;
     $('w' + cap).textContent = '';
     $('pv' + cap).innerHTML = '';
-    if (kind === 'char') $('iChar').textContent = '';
+    $('i' + cap).textContent = '';
     let preview = null;
     if (s.code.length === 13 && !BB.isValidJan(s.code)) {
       $('w' + cap).textContent = 'チェックデジット（末尾の数字）が合いません。JANコードではありません';
@@ -164,7 +167,30 @@
   }
   $('inChar').addEventListener('input', (e) => setSlot('char', e.target.value));
   $('inItem').addEventListener('input', (e) => setSlot('item', e.target.value));
-  document.querySelectorAll('[data-rand]').forEach((b) => b.onclick = () => setSlot(b.dataset.rand, BB.randomCode(b.dataset.rand)));
+  // ランダムは、戦士・アイテムそれぞれ1日1回（端末の日付で切り替わる）。2回目以降は今日のコードを入れ直すだけ
+  const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const usedToday = (kind) => !!(daily[kind] && daily[kind].date === today());
+  function updateRandButtons() {
+    document.querySelectorAll('[data-rand]').forEach((b) => { b.textContent = usedToday(b.dataset.rand) ? '🎲 今日は済' : '🎲 ランダム'; });
+  }
+  async function onRandom(kind) {
+    const cap = kind === 'char' ? 'Char' : 'Item';
+    let note;
+    if (usedToday(kind)) {
+      setSlot(kind, daily[kind].code);
+      note = '🎲 ランダムは1日1回です。今日のコードを入れ直しました（次は明日）';
+    } else {
+      const code = BB.randomCode(kind);
+      daily[kind] = { date: today(), code };
+      await Store.setDaily(cur, kind, daily[kind]);
+      updateRandButtons();
+      setSlot(kind, code);
+      note = '🎲 今日のランダム（1日1回）';
+    }
+    const el = $('i' + cap);
+    el.textContent = el.textContent ? note + '　' + el.textContent : note;
+  }
+  document.querySelectorAll('[data-rand]').forEach((b) => b.onclick = () => onRandom(b.dataset.rand));
   document.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => setSlot(b.dataset.clear, ''));
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
   document.querySelectorAll('[data-scan]').forEach((b) => b.onclick = () => openScan(b.dataset.scan));
@@ -467,6 +493,7 @@
     ・限界レベルは最初Lv5。同じシールの別ロットのバーコードで+5ずつ、キラキラの限界まで上がります。<br>
     ・攻撃は<b>タイミングメーター</b>を中央で止めるほどダメージ最大2倍。特殊技は防御無視・必中で3ターンに1回。<br>
     ・薬草は3個。「薬草」は確実に回復、「パワーキー」は薬草1個で運とタイミング次第の大回復。<br>
+    ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけ（2回目からは今日のコードを入れ直すだけ）。<br>
     ・書籍のアイテムは武器・防具・アクセサリー（能力アップなど）か、使い切りの回復薬。<br>
     ・先にHPが0になった方の負けです。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
