@@ -437,13 +437,19 @@
       if (!p.members.includes(c) || !(player.bag[id] > 0) || used.has(id)) delete p.items[c]; else used.add(id);
     }
   }
+  // パーティ編成の枠の中に出す、小さなステータスバー
+  function miniBars(e) {
+    const f = BB.makeFighter(BB.decode(e.code), null, e.level);
+    const sts = { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp };
+    return '<div class="mbars">' + STAT_NAMES.map(([k, n]) => `<div class="mb"><span>${n}</span><i><u style="width:${Math.min(100, sts[k] / 1.4)}%"></u></i><b>${Math.round(sts[k])}</b></div>`).join('') + '</div>';
+  }
   function memberRow(e, inParty, idxs) {
     const row = document.createElement('div'); row.className = 'prow';
     const th = document.createElement('div'); th.className = 'pth'; row.appendChild(th);
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
     const info = document.createElement('div'); info.className = 'pinfo';
-    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>`;
+    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e)}`;
     row.appendChild(info);
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
@@ -491,15 +497,10 @@
   const STAT_NAMES = [['hp', '❤️'], ['st', '⚔️'], ['df', '🛡️'], ['dx', '👟'], ['sp', '✨']];
   const canvasCache = {};
 
-  function detailHtml(f, foeAttrs) {
+  function detailHtml(f, foeAttrs, opts = {}) {
     const A = BB.ATTRS[f.attr];
     const sts = { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp };
     const bars = STAT_NAMES.map(([k, n]) => `<div class="dbar"><span class="dn">${n}</span><div class="dtrack"><div style="width:${Math.min(100, sts[k] / 3)}%"></div></div><b>${sts[k]}</b></div>`).join('');
-    const skills = Battle.SKILL_ORDER.filter((id) => id !== 'item' || f.consumable).map((id) => {
-      const sk = Battle.SKILLS[id];
-      const extra = id === 'special' ? `（威力の目安 ${Math.round(f.sp * 2.2 + 5)}）` : (id === 'attack' || id === 'quick') ? `（⚔️が基準。⚔️ ${f.st}）` : '';
-      return `<div class="dsk"><b>${sk.name}</b>${sk.pri ? ` <span class="tag">優先度${sk.pri > 0 ? '+' : ''}${sk.pri}</span>` : ''}<div class="small">${sk.desc}${extra}</div></div>`;
-    }).join('');
     // 経験値：次のレベルまでの進み具合（図鑑にいる戦士だけ。相手のCPUには出さない）
     let xpRow = '';
     const de = dex[f.code];
@@ -508,7 +509,7 @@
       const base = BB.xpForLevel(de.level), need = BB.xpForLevel(de.level + 1) - base;
       const into = capped ? need : de.xp - base, pct = capped ? 100 : Math.round(into / need * 100);
       const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（別ロットで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
-      xpRow = `<div class="dbar"><span class="dn">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
+      xpRow = `<div class="dbar"><span class="dn t">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
     }
     const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b>：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
     const atk = f.atkAttr !== f.attr ? `／攻撃の属性は${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? `／体の属性は${BB.ATTRS[f.bodyAttr].name}` : '';
@@ -520,10 +521,15 @@
     return `<div class="dhead"><div class="dstk"></div><div><div class="nm">${A.emoji} ${f.name}</div>
       <div class="small">${f.role}　${f.type}</div><div class="small">${A.name}属性${atk}${body}　✨${f.kirakira.name}</div>
       <div class="small">Lv${f.level} / 限界Lv${dex[f.code] ? dex[f.code].maxLv : f.limit}</div></div></div>
-      ${bars}${xpRow}<div class="small">体力 ${f.maxHp}（❤️ × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
+      ${opts.noBars ? '' : bars + `<div class="small">体力 ${f.maxHp}（❤️ × ${BB.HP_SCALE}）</div>`}${xpRow}${item}${aff}${opts.story ? storyHtml(f) : ''}`;
   }
-  function fillDetail(box, f, foeAttrs) {
-    box.innerHTML = detailHtml(f, foeAttrs);
+  // キャラの「とくちょう」と「ものがたり」（stories.js）
+  function storyHtml(f) {
+    const s = (typeof BB_STORIES !== 'undefined' ? BB_STORIES : {})[String(f.idx).padStart(2, '0')] || null;
+    return s ? `<h3>とくちょう</h3><p class="story">${s[0]}</p><h3>ものがたり</h3><p class="story">${s[1]}</p>` : '';
+  }
+  function fillDetail(box, f, foeAttrs, opts) {
+    box.innerHTML = detailHtml(f, foeAttrs, opts);
     const tok = box._tok = (box._tok || 0) + 1; // 速く切りかえたとき、古い画像があとから入らないようにする
     makeSticker(f, 192).then((c) => { const t = box.querySelector('.dstk'); if (t && box._tok === tok) { t.innerHTML = ''; t.appendChild(c); } });
   }
@@ -531,7 +537,7 @@
     const id = player.party.items[code];
     const f = BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
     modal('<div id="dmBox"></div><button class="pri" style="width:100%;margin-top:10px" onclick="document.getElementById(\'modalMask\').classList.remove(\'on\')">閉じる</button>');
-    fillDetail($('dmBox'), f);
+    fillDetail($('dmBox'), f, null, { noBars: true, story: true });
   }
 
   // ---------- 見せ合い・選出（制限時間つき） ----------
