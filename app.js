@@ -645,6 +645,7 @@
     const mineList = picked.map((i) => myParty[i]), foeList = foeSel.map((i) => foeParty[i]);
     await revealSelections(mineList, foeList);
     const winner = await runBattle(mineList, foeList);
+    if (winner === 'giveup') { await giveUpMatch(); return; }
     await afterGame(winner, foeSel);
   }
   $('btnPick').onclick = confirmPick;
@@ -749,15 +750,25 @@
       return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　HP ${view.hp[0][i]}/${f.maxHp}`, value: i };
     });
     if (canCancel) opts.push({ label: '← 戻る', value: -1 });
+    opts.push({ label: '🏳 あきらめる', value: -2 });
     const v = await choose(title, opts);
+    if (v === -2) return (await confirmGiveUp()) ? 'giveup' : null;
     return v >= 0 ? v : null;
+  }
+  async function confirmGiveUp() {
+    const ok = await choose('あきらめますか？', [
+      { label: (match && match.maxGames > 1 ? '3本勝負が、ここで終わります。' : '') + '経験値もお金も、アイテムももらえません（使った回復薬はなくなります）。', value: 0, disabled: true },
+      { label: '🏳 あきらめる', value: 1 }, { label: 'たたかいをつづける', value: 0 }]);
+    return !!ok;
   }
   async function chooseAction() {
     for (;;) {
       const f = Battle.actOf(st, 0);
       const top = await choose(`${f.name} はどうする？`, [
         { label: '⚔ スキル（このキャラで継続）', value: 'skill' },
-        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[0]).length }]);
+        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[0]).length },
+        { label: '🏳 あきらめる', value: 'giveup' }]);
+      if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
         const opts = Battle.availableSkills(st, 0).map((s) => ({
           label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
@@ -768,6 +779,7 @@
         if (id) return { type: 'skill', skill: id };
       } else if (top === 'switch') {
         const to = await pickBench('だれと交代する？', true);
+        if (to === 'giveup') return { type: 'giveup' };
         if (to !== null) return { type: 'switch', to };
       }
     }
@@ -784,11 +796,13 @@
     while (!st.over) {
       $('timeline').innerHTML = '';
       const mine = await chooseAction();            // 同時入力：相手の行動は見えない
+      if (mine.type === 'giveup') return 'giveup';
       const foeAct = Battle.cpuAction(st, 1, rng);
       await playEvents(Battle.resolveTurn(st, [mine, foeAct], rng));
       for (const s of Battle.needReplace(st)) {      // たおれたあとは、次に出すキャラを選ぶ
         let to = null;
         if (s === 0) { while (to === null) to = await pickBench('次に出すキャラを選んでください', false); } else to = Battle.cpuReplace(st, 1);
+        if (to === 'giveup') return 'giveup';
         await playEvents([Battle.replaceActive(st, s, to)]);
       }
       await sleep(250);
@@ -819,6 +833,20 @@
     $('btSub').textContent = `ここまで ${match.wins[0]}勝 ${match.wins[1]}敗（先に2勝で勝ち）`;
     renderFoeReveal($('btFoe'));
     show('between');
+  }
+
+  // あきらめた：経験値・お金・ドロップはなし。試合の中で使った回復薬だけ、へる（持ち込みも、戻らない）
+  async function giveUpMatch() {
+    for (const id of [...match.usedMine, ...st.sides[0].usedItems]) {
+      player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
+      for (const c of Object.keys(player.party.items)) if (player.party.items[c] === id) delete player.party.items[c];
+    }
+    await savePlayer();
+    $('resEmo').textContent = '🏳'; $('resTitle').textContent = 'あきらめた';
+    $('resSub').textContent = 'この対戦では、経験値もお金もアイテムも、もらえません';
+    $('rewards').innerHTML = '<div class="reward none" style="--d:0s"><div class="ic">🏳</div><div class="rb"><div class="rt">報酬なし</div><div class="small">また、がんばろう！</div></div></div>';
+    $('foeRevealTitle').style.display = 'none'; $('foeReveal').innerHTML = '';
+    renderWallet(); show('result');
   }
 
   // 結果：出場した戦士に経験値、お金、まれにアイテム
