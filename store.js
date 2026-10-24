@@ -23,9 +23,10 @@
     },
     async getCurrent() { const d = read(); return d.profiles[d.current] ? d.current : null; },
     async setCurrent(id) { const d = read(); if (d.profiles[id]) { d.current = id; write(d); } },
-    async getDex(pid) { const p = read().profiles[pid]; return p ? p.dex : {}; },
+    async getDex(pid) { const p = read().profiles[pid]; return p && p.dex ? p.dex : {}; },
     async saveFighter(pid, entry) {
       const d = read(); if (!d.profiles[pid]) return;
+      if (!d.profiles[pid].dex) d.profiles[pid].dex = {};
       d.profiles[pid].dex[entry.code] = entry; commit(d, pid);
     },
     // お金・持ち物・手に入れた書籍のコード・パーティ
@@ -33,7 +34,7 @@
     async getPlayer(pid) {
       const p = read().profiles[pid] || {};
       return {
-        money: p.money || 0, bag: p.bag || {}, itemCodes: p.itemCodes || [], party: p.party || { members: [], items: {} },
+        money: p.money || 0, bag: p.bag || {}, itemCodes: p.itemCodes || [], party: { members: (p.party && p.party.members) || [], items: (p.party && p.party.items) || {} },
         shop: p.shop || { date: '', bought: [] },                       // 今日買った品
         train: p.train || { date: '', xp: 0 },                          // 今日の修行の合計
         carry: p.carry || { herbs: 0, boost: false },                   // 次の試合への持ち込み

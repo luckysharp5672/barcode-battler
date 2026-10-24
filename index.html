@@ -207,6 +207,8 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="small" id="cloudState" style="margin-bottom:8px;line-height:1.6"></div>
     <div class="row" id="cloudBtns"></div>
   </div>
+  <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2144</div>
 </section>
 
 <!-- お店 -->
@@ -302,11 +304,18 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 <!-- タイミング / メニュー / ヘルプ 共用モーダル -->
 <div class="mask" id="modalMask"><div class="modal" id="modalBody"></div></div>
 
-<script src="data.js"></script>
-<script src="engine.js"></script>
-<script src="battle.js"></script>
-<script src="store.js"></script>
-<script src="cloud.js"></script>
-<script src="app.js"></script>
+<script>
+  // 起動時のエラーを、画面の一番下に出す（スマホでも原因が分かるように）
+  window.__errs = [];
+  function __showErr(m) { window.__errs.push(m); var d = document.getElementById('diag'); if (d) d.textContent = '⚠ ' + window.__errs.slice(-2).join(' / '); }
+  window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
+  window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
+</script>
+<script src="data.js?v=20261024-2144"></script>
+<script src="engine.js?v=20261024-2144"></script>
+<script src="battle.js?v=20261024-2144"></script>
+<script src="store.js?v=20261024-2144"></script>
+<script src="cloud.js?v=20261024-2144"></script>
+<script src="app.js?v=20261024-2144"></script>
 </body>
 </html>

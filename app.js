@@ -65,9 +65,9 @@
       if (!d || d.kind !== 'char') { delete dex[c]; return; }
       const e = dex[c];
       Object.assign(e, { idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit });
-      e.lots = e.lots || [];
+      e.lots = e.lots || []; e.xp = e.xp || 0; e.wins = e.wins || 0; e.losses = e.losses || 0;
       e.maxLv = BB.maxLevelOf(d.limit, e.lots.length);
-      e.level = Math.min(e.level, e.maxLv);
+      e.level = Math.min(e.level || 1, e.maxLv);
     });
     // 45と49で同じ戦士になった重複は、経験値が多い方を残す
     const seen = {};
@@ -1082,8 +1082,9 @@
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 
   if (window.Cloud) Cloud.onStatus = renderCloud;
+  renderCloud();   // まず表示する（このあとの読み込みで何かあっても、家族クラウドのボタンは出す）
   loadProfiles().then(() => {
     renderCloud();
     if (window.Cloud) Cloud.init(() => loadProfiles());   // つながっていれば、起動時に同期（新しいデータがあれば取り込む）
-  });
+  }).catch((e) => { renderCloud(); if (window.__showErr) __showErr('読み込み：' + (e && (e.message || e))); });
 })();
