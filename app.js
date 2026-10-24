@@ -183,17 +183,19 @@
   }
   $('libClose').onclick = () => $('libMask').classList.remove('on');
 
-  // カメラスキャン（BarcodeDetector 対応ブラウザ + HTTPS/localhost が必要）
-  let stream = null, scanning = false;
-  async function openScan(kind) {
-    $('scanMask').classList.add('on');
-    $('scanMsg').textContent = '';
-    if (!('BarcodeDetector' in window)) { $('scanMsg').textContent = 'このブラウザはバーコード読み取りに未対応です。数字を直接入力してください（Android Chromeなら使えます）'; return; }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）'; return; }
-    const v = $('video');
-    v.srcObject = stream; await v.play();
+  // カメラスキャン。ブラウザの BarcodeDetector（Android Chrome など）があればそれを使い、
+  // 無ければ同梱の ZXing（vendor/zxing-library.min.js）で読み取る（PCのChrome・iPhoneなど）。HTTPS/localhost が必要
+  let stream = null, scanning = false, zxLoading = null;
+  function loadZXing() {
+    if (window.ZXing) return Promise.resolve();
+    return zxLoading || (zxLoading = new Promise((res, rej) => {
+      const t = document.createElement('script');
+      t.src = 'vendor/zxing-library.min.js';
+      t.onload = res; t.onerror = () => { zxLoading = null; rej(new Error('zxing')); };
+      document.head.appendChild(t);
+    }));
+  }
+  async function useDetector(kind, v) {
     const det = new BarcodeDetector({ formats: ['ean_13'] });
     scanning = true;
     while (scanning) {
@@ -203,6 +205,41 @@
       } catch (e) { /* 読み取り失敗は無視して再試行 */ }
       await sleep(250);
     }
+  }
+  async function useZXing(kind, v) {
+    $('scanMsg').textContent = '読み取りの準備中…';
+    try { await loadZXing(); } catch (e) { $('scanMsg').textContent = '読み取りの部品を読み込めませんでした。数字を直接入力してください'; return; }
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    scanning = true;
+    $('scanMsg').textContent = 'バーコードを枠いっぱいに、明るい場所で写してください';
+    while (scanning) {
+      if (v.videoWidth) {
+        cv.width = v.videoWidth; cv.height = v.videoHeight;
+        ctx.drawImage(v, 0, 0);
+        try {
+          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));
+          const raw = reader.decode(bmp).getText();
+          closeScan(); setSlot(kind, raw); return;
+        } catch (e) { /* このコマには見つからない。次のコマへ */ }
+      }
+      await sleep(150);
+    }
+  }
+  async function openScan(kind) {
+    $('scanMask').classList.add('on');
+    $('scanMsg').textContent = '';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）'; return; }
+    const v = $('video');
+    v.srcObject = stream; await v.play();
+    if ('BarcodeDetector' in window) await useDetector(kind, v); else await useZXing(kind, v);
   }
   function closeScan() {
     scanning = false;
