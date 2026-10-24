@@ -147,6 +147,70 @@
         const c2 = cfg(); if (c2.deleted) { delete c2.deleted[pid]; saveCfg(c2); }
       } catch (e) { setStatus(explain(e)); }
     },
+    // ---- 通信対戦の部屋（同じ家族の中だけ）----
+    uid: () => (fb && fb.auth.currentUser ? fb.auth.currentUser.uid : null),
+    // 部屋を作って、部屋コード（6文字）を返す。info = { name, maxGames, party(姿と属性だけ), ver }
+    async createRoom(info) {
+      const f = await sdk(), user = await signIn(), fid = cfg().familyId;
+      if (!fid) throw new Error('not-connected');
+      for (let i = 0; i < 6; i++) {
+        let id = ''; const buf = new Uint32Array(6); crypto.getRandomValues(buf);
+        for (const n of buf) id += ALPHABET[n % ALPHABET.length];
+        const ref = f.F.doc(f.db, 'rooms', id);
+        if ((await f.F.getDoc(ref)).exists()) continue;
+        await f.F.setDoc(ref, {
+          familyId: fid, hostUid: user.uid, hostName: info.name, guestUid: null, guestName: '', hostParty: info.party, guestParty: null,
+          maxGames: info.maxGames, state: 'waiting', seed: String(Math.floor(Math.random() * 1e9)), ver: info.ver || '', createdAt: Date.now(),
+        });
+        return id;
+      }
+      throw new Error('room-id');
+    },
+    // 待っている部屋の一覧（自分の家族のもの。15分以内）。ルールで一覧が許可されていないと permission-denied
+    async listRooms() {
+      const f = await sdk(), user = await signIn(), fid = cfg().familyId;
+      if (!fid) return [];
+      const snap = await f.F.getDocs(f.F.query(f.F.collection(f.db, 'rooms'), f.F.where('familyId', '==', fid), f.F.where('state', '==', 'waiting')));
+      const out = []; snap.forEach((d) => out.push({ id: d.id, ...d.data() }));
+      return out.filter((r) => r.hostUid !== user.uid && Date.now() - (r.createdAt || 0) < 15 * 60 * 1000).sort((a, b) => b.createdAt - a.createdAt);
+    },
+    // 部屋に入る。info = { name, party, ver }。うまくいくと、部屋のデータを返す
+    async joinRoom(id, info) {
+      const f = await sdk(), user = await signIn();
+      id = normalize(id);
+      const ref = f.F.doc(f.db, 'rooms', id), snap = await f.F.getDoc(ref);
+      if (!snap.exists()) throw new Error('not-found');
+      const r = snap.data();
+      if (r.familyId !== cfg().familyId) throw new Error('other-family');
+      if (r.hostUid === user.uid) throw new Error('self');
+      if (r.state !== 'waiting' || r.guestUid) throw new Error('full');
+      if (r.ver && info.ver && r.ver !== info.ver) throw new Error('ver:' + r.ver);
+      await f.F.updateDoc(ref, { guestUid: user.uid, guestName: info.name, guestParty: info.party, state: 'select' });
+      return { id, ...r, guestUid: user.uid, guestName: info.name, guestParty: info.party, state: 'select' };
+    },
+    // 部屋の変化を見張る。cb(部屋のデータ または null)。見張りをやめる関数を返す
+    watchRoom(id, cb) {
+      let un = () => {}, stopped = false;
+      sdk().then((f) => { if (!stopped) un = f.F.onSnapshot(f.F.doc(f.db, 'rooms', id), (s) => cb(s.exists() ? s.data() : null), () => cb(null)); });
+      return () => { stopped = true; un(); };
+    },
+    async closeRoom(id, reason) {
+      try { const f = await sdk(); await f.F.updateDoc(f.F.doc(f.db, 'rooms', id), { state: 'closed', closedBy: (fb && fb.auth.currentUser ? fb.auth.currentUser.uid : ''), reason: reason || '' }); } catch (e) { /* すでに閉じている／消えている */ }
+    },
+    async deleteRoom(id) { try { const f = await sdk(); await f.F.deleteDoc(f.F.doc(f.db, 'rooms', id)); } catch (e) { /* 無視 */ } },
+    // 部屋の中のやりとり（選出・ターンの行動など）
+    async setSub(id, sub, docId, data) { const f = await sdk(); await f.F.setDoc(f.F.doc(f.db, 'rooms', id, sub, docId), { ...JSON.parse(JSON.stringify(data)), at: Date.now() }); },
+    // 相手のデータが書かれるのを待つ。{ promise, cancel }。promise は データ／（時間切れ）undefined／（取りやめ）null
+    waitSub(id, sub, docId, opts) {
+      let un = () => {}, timer = null, done = false, settle;
+      const promise = new Promise((res) => { settle = (v) => { if (done) return; done = true; clearTimeout(timer); un(); res(v); }; });
+      sdk().then((f) => {
+        if (done) return;
+        un = f.F.onSnapshot(f.F.doc(f.db, 'rooms', id, sub, docId), (s) => { if (s.exists()) settle(s.data()); }, () => settle(null));
+      });
+      if (opts && opts.timeoutMs) timer = setTimeout(() => settle(undefined), opts.timeoutMs);
+      return { promise, cancel: () => settle(null) };
+    },
     // この端末だけ切りはなす（クラウドのデータは、そのまま残る）
     leave() { saveCfg({}); root.Store.onChange = null; setStatus(''); },
     // 起動時：つながっていれば同期して、新しいデータを受け取ったら onPulledFn を呼ぶ

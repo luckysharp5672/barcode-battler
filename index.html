@@ -154,6 +154,7 @@ body[data-frame="flame"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.
 @keyframes flick{to{box-shadow:0 0 6px #ff4d0066;outline-color:#ffb86b}}
 body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #ff5f5f;animation:rbw 3s linear infinite}
 @keyframes rbw{0%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}20%{outline-color:#ffd24d;box-shadow:0 0 14px #ffd24d}40%{outline-color:#5fff8a;box-shadow:0 0 14px #5fff8a}60%{outline-color:#5fd2ff;box-shadow:0 0 14px #5fd2ff}80%{outline-color:#b06bff;box-shadow:0 0 14px #b06bff}100%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}}
+.warnt{color:var(--hp3)}
 </style>
 </head>
 <body>
@@ -201,7 +202,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <button class="pri" id="btnBattle">⚔ シングル（1本）</button>
     <button class="pri" id="btnBo3">🏆 3本勝負</button>
   </div>
-  <div class="row"><button id="btnShop">🏪 お店</button><button id="btnHelp">📖 あそびかた</button></div>
+  <div class="row"><button id="btnShop">🏪 お店</button><button id="btnPvp">🌐 家族対戦</button><button id="btnHelp">📖 あそびかた</button></div>
 
   <div class="card" id="cloudCard">
     <h2>☁ 家族クラウド（端末をまたいで図鑑・お金・パーティを共有）</h2>
@@ -209,7 +210,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2201</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10242322</div>
 </section>
 
 <!-- お店 -->
@@ -220,6 +221,34 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   <div class="info" id="shopMsg"></div>
   <div id="shopBox"></div>
   <div class="row"><button class="pri" id="btnShopBack">← ホームへ</button></div>
+</section>
+
+<!-- 家族対戦（ロビー） -->
+<section id="lobby" class="screen">
+  <h1>🌐 家族対戦</h1>
+  <p class="sub">同じ家族につないでいるユーザーと、それぞれの端末で対戦します。パーティは「👥 パーティ編成」のものを使います。</p>
+  <div class="card">
+    <h2>部屋を作って、あいてを待つ</h2>
+    <div class="row"><button class="pri" id="btnRoom1">🆕 1本勝負の部屋</button><button class="pri" id="btnRoom3">🆕 3本勝負の部屋</button></div>
+    <div id="lobbyWait" style="display:none">
+      <div class="small">部屋コード（家族に伝えると、入れます）</div>
+      <div class="big" id="roomCode" style="font-size:36px;letter-spacing:.2em;margin:6px 0"></div>
+      <div class="small" id="waitInfo"></div>
+      <div class="row"><button id="btnRoomCancel">部屋をとじる</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>待っている部屋</h2>
+    <div id="lobbyList"></div>
+    <div class="row"><button id="btnLobbyRefresh">🔄 更新</button></div>
+  </div>
+  <div class="card">
+    <h2>部屋コードで入る</h2>
+    <input type="text" id="inRoom" placeholder="部屋コード（6文字）" maxlength="8" autocapitalize="characters">
+    <div class="row"><button class="pri" id="btnRoomJoin">入る</button></div>
+  </div>
+  <div class="warn" id="lobbyMsg"></div>
+  <div class="row"><button id="btnLobbyBack">← ホームへ</button></div>
 </section>
 
 <!-- パーティ編成 -->
@@ -263,6 +292,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 <section id="battle" class="screen">
   <div class="starline" id="starLine"></div>
   <div id="timeline"></div>
+  <div class="small" id="turnTimer" style="text-align:center;min-height:18px"></div>
   <div class="card fighter" id="foeCard"></div>
   <div class="log" id="log"></div>
   <div class="card fighter" id="meCard"></div>
@@ -313,11 +343,11 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=20261024-2201"></script>
-<script src="engine.js?v=20261024-2201"></script>
-<script src="battle.js?v=20261024-2201"></script>
-<script src="store.js?v=20261024-2201"></script>
-<script src="cloud.js?v=20261024-2201"></script>
-<script src="app.js?v=20261024-2201"></script>
+<script src="data.js?v=10242322"></script>
+<script src="engine.js?v=10242322"></script>
+<script src="battle.js?v=10242322"></script>
+<script src="store.js?v=10242322"></script>
+<script src="cloud.js?v=10242322"></script>
+<script src="app.js?v=10242322"></script>
 </body>
 </html>

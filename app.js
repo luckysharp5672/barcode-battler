@@ -344,16 +344,24 @@
   // ---------- モーダル ----------
   function modal(html) { $('modalBody').innerHTML = html; $('modalMask').classList.add('on'); }
   function closeModal() { $('modalMask').classList.remove('on'); }
+  let activeChoose = null, turnExpired = false;
   function choose(title, options) {
-    return new Promise((res) => {
+    return new Promise((res, rej) => {
+      if (turnExpired) { rej(new Error('timeout')); return; }   // 通信対戦：入力の時間が切れたあとは、開かない
+      activeChoose = { rej };
       modal(`<h2 style="margin:0 0 8px;font-size:16px">${title}</h2><div class="lib" id="choices"></div>`);
       options.forEach((o) => {
         const b = document.createElement('button');
         b.innerHTML = o.label; b.disabled = !!o.disabled;
-        b.onclick = () => { closeModal(); res(o.value); };
+        b.onclick = () => { activeChoose = null; closeModal(); res(o.value); };
         $('choices').appendChild(b);
       });
     });
+  }
+  // 開いている選択を、時間切れ（'timeout'）や取りやめ（'aborted'）でとじる
+  function cancelChoose(reason) {
+    if (!activeChoose) return;
+    const c = activeChoose; activeChoose = null; closeModal(); c.rej(new Error(reason || 'timeout'));
   }
   // ---------- パーティ編成（最大6体。同じキャラ1体まで、同じアイテムは1体まで） ----------
   const PARTY_MAX = 6, PICK = 3, PICK_SECONDS = 60;
@@ -510,7 +518,7 @@
     const th = document.createElement('div'); th.className = 'pth'; th.appendChild(f.canvas); el.appendChild(th);
     el.insertAdjacentHTML('beforeend', hidden
       ? `<div>${A.emoji} ${A.name}属性</div>`
-      : `<div>${A.emoji} ${f.name}</div><div class="small">Lv${f.level}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`);
+      : `<div>${A.emoji} ${f.name}</div><div class="small">${f.level == null ? 'Lv？' : 'Lv' + f.level}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`);
     if (extra) el.insertAdjacentHTML('beforeend', extra);
     if (onClick) el.onclick = onClick;
     return el;
@@ -600,6 +608,7 @@
     await nextGame();
   }
   async function nextGame() {
+    if (pvp) return nextPvpGame();
     match.game++;
     myParty = match.codes.map(memberFighter);
     foeParty = match.foeBase.map(foeFresh);
@@ -617,7 +626,7 @@
       $('pickTimer').textContent = Math.max(0, left);
       ring.style.setProperty('--p', Math.max(0, left) / PICK_SECONDS * 100);
       ring.classList.toggle('warn', left <= 10);
-      $('foeState').textContent = PICK_SECONDS - left >= decideAt ? 'あいて：決定ずみ ✓' : 'あいて：選出中…';
+      $('foeState').textContent = (pvp ? pvp.oppDecided : PICK_SECONDS - left >= decideAt) ? 'あいて：決定ずみ ✓' : 'あいて：選出中…';
       if (left <= 10 && left > 0) beep(left <= 3 ? 1320 : 880);
     };
     clearInterval(pickTimer); tick();
@@ -654,6 +663,7 @@
     });
   }
   async function confirmPick() {
+    if (pvp) return pvpGuard(confirmPickPvp);
     clearInterval(pickTimer);
     const foeSel = Battle.cpuSelect(foeParty, myParty, PICK);
     const mineList = picked.map((i) => myParty[i]), foeList = foeSel.map((i) => foeParty[i]);
@@ -665,6 +675,13 @@
   $('btnPick').onclick = confirmPick;
   // 「もどる」：見せ合い・選出をやめてホームへ。1試合目なら、持ち込み（薬草・ブースト）は使っていないので返す
   async function backFromPick() {
+    if (pvp) {
+      const ok = await choose('対戦をやめますか？', [
+        { label: 'あいてには、「退出しました」と伝わります。', value: 0, disabled: true },
+        { label: 'やめてホームへ', value: 1 }, { label: 'つづける', value: 0 }]);
+      if (ok) await leavePvp('left');
+      return;
+    }
     if (match && match.game > 1) {
       const ok = await choose('3本勝負をやめますか？', [
         { label: 'ここまでの結果は消えて、経験値もお金ももらえません。', value: 0, disabled: true },
@@ -681,11 +698,12 @@
   $('btnNext').onclick = nextGame;
 
   // ---------- 対戦（同時入力ターン制） ----------
-  let st = null, view = null, logLines = [];
+  let st = null, view = null, logLines = [], mySide = 0, pvp = null; // mySide：内部の並びで、自分が 0 か 1 か（通信対戦のゲストは 1）
   function say(t) { logLines.push(t); if (logLines.length > 6) logLines.shift(); $('log').innerHTML = logLines.map((l) => `<div>${l}</div>`).join(''); }
-  const cardOfSide = (s) => (s === 0 ? $('meCard') : $('foeCard'));
-  const sideName = (s) => (s === 0 ? 'あなた' : 'てき');
+  const cardOfSide = (s) => (s === mySide ? $('meCard') : $('foeCard'));
+  const sideName = (s) => (s === mySide ? 'あなた' : (pvp ? pvp.oppName : 'てき'));
   function cardHtml(s) {
+    const mine = s === mySide;
     const side = st.sides[s], idx = view.active[s], f = side.party[idx], hp = view.hp[s][idx];
     const A = BB.ATTRS[f.attr], pct = Math.max(0, hp / f.maxHp * 100);
     const col = pct > 50 ? 'var(--hp)' : pct > 20 ? 'var(--hp2)' : 'var(--hp3)';
@@ -693,18 +711,18 @@
     const atk = f.atkAttr !== f.attr ? `（攻:${BB.ATTRS[f.atkAttr].name}）` : '', body = f.bodyAttr !== f.attr ? `（体:${BB.ATTRS[f.bodyAttr].name}）` : '';
     // 控えのボール：自分は属性色・名前・HP%、相手は場に出てくるまで「？」
     const chips = side.party.map((m, i) => {
-      const known = s === 0 || view.seen[s].has(i);
+      const known = mine || view.seen[s].has(i);
       const dead = view.hp[s][i] <= 0, p = Math.ceil(Math.max(0, view.hp[s][i]) / m.maxHp * 100);
       const dot = known ? `<span class="dot" style="background:${ATTR_COLORS[m.attr]}"></span>` : '<span class="dot" style="background:#555"></span>';
-      return `<span class="chip ${i === idx ? 'on' : ''} ${dead ? 'dead' : ''}">${dot}${known ? m.name : '？'}${s === 0 && !dead ? ` ${p}%` : ''}</span>`;
+      return `<span class="chip ${i === idx ? 'on' : ''} ${dead ? 'dead' : ''}">${dot}${known ? m.name : '？'}${mine && !dead ? ` ${p}%` : ''}</span>`;
     }).join('');
-    const hpText = s === 0 ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;
-    const detail = s === 0
+    const hpText = mine ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;
+    const detail = mine
       ? `${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}`
       : `${A.emoji}${A.name}属性`;
-    const hist = s === 1 && view.hist[1].length ? `<div class="small">あいての直近：${view.hist[1].slice(-3).join('・')}</div>` : '';
+    const hist = !mine && view.hist[s].length ? `<div class="small">あいての直近：${view.hist[s].slice(-3).join('・')}</div>` : '';
     return `<div class="frow"><div class="stk"></div><div class="finfo">
-      <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)}${s === 0 && titleText() ? '【' + titleText() + '】' : ''} ${f.name}</span><span>Lv${f.level}</span></div>
+      <div class="top"><span style="color:var(--${mine ? 'me' : 'foe'})">${sideName(s)}${mine && titleText() ? '【' + titleText() + '】' : ''} ${f.name}</span><span>Lv${f.level}</span></div>
       <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
       <div class="small">${hpText}${stt ? ' ／ 💫' + stt : ''}</div>
       <div class="small">${detail}</div>${hist}
@@ -728,7 +746,7 @@
     for (const e of events) {
       switch (e.t) {
         case 'order': { // 行動順のタイムライン：交代 → 優先度の高いスキル → DX
-          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === 0 ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・DX${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
+          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === mySide ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・DX${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
           e.list.forEach((x) => view.hist[x.s].push(x.label));
           renderBattle(); await sleep(500 + e.list.length * 350); break;
         }
@@ -758,10 +776,10 @@
 
   // 自分の行動を決める（スキル／交代）
   async function pickBench(title, canCancel) {
-    const side = st.sides[0];
+    const side = st.sides[mySide];
     const opts = Battle.benchAlive(side).map((i) => {
       const f = side.party[i];
-      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　HP ${view.hp[0][i]}/${f.maxHp}`, value: i };
+      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　HP ${view.hp[mySide][i]}/${f.maxHp}`, value: i };
     });
     if (canCancel) opts.push({ label: '← 戻る', value: -1 });
     opts.push({ label: '🏳 あきらめる', value: -2 });
@@ -771,20 +789,20 @@
   }
   async function confirmGiveUp() {
     const ok = await choose('あきらめますか？', [
-      { label: (match && match.maxGames > 1 ? '3本勝負が、ここで終わります。' : '') + '経験値もお金も、アイテムももらえません（使った回復薬はなくなります）。', value: 0, disabled: true },
+      { label: (pvp ? 'あいての勝ちになります。' : '') + (match && match.maxGames > 1 ? '3本勝負が、ここで終わります。' : '') + '経験値もお金も、アイテムももらえません（使った回復薬はなくなります）。', value: 0, disabled: true },
       { label: '🏳 あきらめる', value: 1 }, { label: 'たたかいをつづける', value: 0 }]);
     return !!ok;
   }
   async function chooseAction() {
     for (;;) {
-      const f = Battle.actOf(st, 0);
+      const f = Battle.actOf(st, mySide);
       const top = await choose(`${f.name} はどうする？`, [
         { label: '⚔ スキル（このキャラで継続）', value: 'skill' },
-        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[0]).length },
+        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[mySide]).length },
         { label: '🏳 あきらめる', value: 'giveup' }]);
       if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
-        const opts = Battle.availableSkills(st, 0).map((s) => ({
+        const opts = Battle.availableSkills(st, mySide).map((s) => ({
           label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
           value: s.id, disabled: !!s.off,
         }));
@@ -801,6 +819,7 @@
 
   // 1試合の対戦。勝者（0=自分 1=相手 -1=引き分け）を返す
   async function runBattle(mineList, foeList) {
+    mySide = 0;
     st = Battle.createBattle(Battle.createSide('あなた', mineList, match.herbs), Battle.createSide('てき', foeList));
     view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [match.herbs, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
@@ -851,7 +870,7 @@
 
   // あきらめた：経験値・お金・ドロップはなし。試合の中で使った回復薬だけ、へる（持ち込みも、戻らない）
   async function giveUpMatch() {
-    for (const id of [...match.usedMine, ...st.sides[0].usedItems]) {
+    for (const id of [...match.usedMine, ...st.sides[mySide].usedItems]) {
       player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
       for (const c of Object.keys(player.party.items)) if (player.party.items[c] === id) delete player.party.items[c];
     }
@@ -860,6 +879,7 @@
     $('resSub').textContent = 'この対戦では、経験値もお金もアイテムも、もらえません';
     $('rewards').innerHTML = '<div class="reward none" style="--d:0s"><div class="ic">🏳</div><div class="rb"><div class="rt">報酬なし</div><div class="small">また、がんばろう！</div></div></div>';
     $('foeRevealTitle').style.display = 'none'; $('foeReveal').innerHTML = '';
+    if (pvp) await pvpEnd('giveup');
     renderWallet(); show('result');
   }
 
@@ -868,8 +888,9 @@
     const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
     $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
     $('resTitle').textContent = win ? 'しょうり！' : draw ? 'ひきわけ' : 'はいぼく…';
-    const avgFoe = Math.round(match.foeBase.reduce((a, f) => a + f.level, 0) / match.foeBase.length);
-    $('resSub').textContent = match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
+    const known = match.foeBase.filter((f) => f.level != null);   // 通信対戦：あいてが出してきた戦士のレベルだけ分かる
+    const avgFoe = known.length ? Math.round(known.reduce((a, f) => a + f.level, 0) / known.length) : 1;
+    $('resSub').textContent = match.pvp ? `${match.oppName} さんとの対戦：${match.wins[0]}勝 ${match.wins[1]}敗` : match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
     const members = [];
     for (const code of match.played) {
       const e = dex[code], oldLv = e.level, oldXp = e.xp;
@@ -892,6 +913,7 @@
     renderRewards({ members, gold, boost: match.boost, drop: dropId ? BB.itemById(dropId) : null });
     $('foeRevealTitle').style.display = 'block';
     renderFoeReveal($('foeReveal'));
+    if (pvp) await pvpEnd('done');
   }
 
   // 報酬画面：経験値 → お金 → アイテム の順に、ひとつずつ現れる
@@ -922,6 +944,274 @@
       add('<div class="ic">🎁</div><div class="rb"><div class="rt">アイテム</div><div class="small">今回はなし（まれに手に入ります）</div></div>', 'none');
     }
   }
+
+  // ---------- 家族対戦（通信対戦：家族につないだユーザー同士。それぞれの端末で） ----------
+  // 画面では「自分」が常に下側。内部の対戦は、どちらの端末でも同じ並び（ホスト=0、ゲスト=1）で、同じ乱数で処理するので、結果が同じになる
+  const TURN_SECONDS = 45;
+  const verOf = () => { const m = ((document.querySelector('script[src*="app.js"]') || {}).src || '').match(/v=([\w-]+)/); return m ? m[1] : ''; };
+  const publicParty = (codes) => codes.map((c) => { const d = BB.decode(c); return { idx: d.idx, kk: d.kk, attr: d.attr }; }); // 見せ合いで見せるのは、姿と属性だけ
+  const rngFor = (g, t) => BB.seeded(BB.hashStr(`${pvp.seed}|${g}|${t}`));
+  const stateHash = () => BB.hashStr(`${st.round}|` + st.sides.map((s) => s.active + ':' + s.party.map((f) => f.hp).join(',')).join('/'));
+  const myName = async () => ((await Store.listProfiles()).find((p) => p.id === cur) || { name: '？' }).name;
+
+  // ---- ロビー ----
+  async function openLobby() {
+    if (!window.Cloud || !Cloud.isConnected()) {
+      await cloudMsg('家族につながっていません', 'ホームの「☁ 家族クラウド」で、家族につないでください。家族対戦は、同じ家族につながっているユーザー同士で遊べます。');
+      return;
+    }
+    if (partyCodes().length < PICK) {
+      const v = await choose('パーティが足りません', [
+        { label: `対戦には${PICK}体以上必要です（いま${partyCodes().length}体）`, value: 0, disabled: true },
+        { label: '👥 パーティ編成へ', value: 1 }, { label: '← 戻る', value: 0 }]);
+      if (v) openParty();
+      return;
+    }
+    $('lobbyWait').style.display = 'none'; $('lobbyMsg').textContent = '';
+    show('lobby'); refreshLobby();
+  }
+  async function refreshLobby() {
+    const box = $('lobbyList'); box.innerHTML = '<p class="small">さがしています…</p>';
+    try {
+      const rooms = await Cloud.listRooms();
+      box.innerHTML = rooms.length ? '' : '<p class="small">いま待っている部屋は、ありません。部屋を作って、家族に声をかけましょう。</p>';
+      rooms.forEach((r) => {
+        const row = document.createElement('div'); row.className = 'srow';
+        row.innerHTML = `<div class="pinfo" style="flex:1"><b>${r.hostName}</b> さんが待っています<div class="small">${r.maxGames > 1 ? '🏆 3本勝負' : '⚔ 1本勝負'}　部屋 ${r.id.toUpperCase()}</div></div>`;
+        const b = document.createElement('button'); b.textContent = '入る'; b.style.flex = 'none'; b.onclick = () => enterRoom(r.id); row.appendChild(b);
+        box.appendChild(row);
+      });
+    } catch (e) {
+      box.innerHTML = `<p class="small">${/permission-denied/.test(String(e.code || e.message)) ? '待っている部屋の一覧を出すには、Firebaseのルールの更新が必要です。下の「部屋コード」では入れます。' : Cloud.explain(e)}</p>`;
+    }
+  }
+  async function hostRoom(games) {
+    $('lobbyMsg').textContent = '';
+    try {
+      const name = await myName();
+      const rid = await Cloud.createRoom({ name, maxGames: games, party: publicParty(partyCodes()), ver: verOf() });
+      pvp = { rid, isHost: true, uid: Cloud.uid(), myName: name, maxGames: games, waiters: new Set(), started: false };
+      $('roomCode').textContent = rid.toUpperCase();
+      $('waitInfo').textContent = `あいてを待っています…（${games > 1 ? '3本勝負' : '1本勝負'}）`;
+      $('lobbyWait').style.display = 'block';
+      pvp.unsub = Cloud.watchRoom(rid, onRoomChange);
+    } catch (e) { $('lobbyMsg').textContent = Cloud.explain(e); }
+  }
+  async function cancelRoom() {
+    if (pvp && !pvp.started) { const p = pvp; pvp = null; p.unsub && p.unsub(); await Cloud.deleteRoom(p.rid); }
+    $('lobbyWait').style.display = 'none';
+  }
+  async function enterRoom(rid) {
+    $('lobbyMsg').textContent = '';
+    try {
+      const name = await myName();
+      const room = await Cloud.joinRoom(rid, { name, party: publicParty(partyCodes()), ver: verOf() });
+      pvp = { rid: room.id, isHost: false, uid: Cloud.uid(), myName: name, maxGames: room.maxGames, waiters: new Set(), started: true };
+      pvp.unsub = Cloud.watchRoom(room.id, onRoomChange);
+      await beginPvpMatch(room);
+    } catch (e) {
+      const m = String(e.message);
+      $('lobbyMsg').textContent = m === 'not-found' ? 'その部屋が見つかりません（コードを確かめてください）' : m === 'full' ? 'その部屋は、もう始まっているか、いっぱいです'
+        : m === 'self' ? '自分の部屋には入れません' : m === 'other-family' ? 'ほかの家族の部屋です' : /^ver:/.test(m) ? `あいてのゲームの版が違います（あいて ${m.slice(4)}／自分 ${verOf()}）。両方の画面を、更新してください` : Cloud.explain(e);
+    }
+  }
+  function onRoomChange(room) {
+    if (!pvp || !room) return;
+    if (pvp.isHost && room.state === 'select' && !pvp.started) { pvp.started = true; beginPvpMatch(room); }
+    if (room.state === 'closed' && room.reason === 'left' && room.closedBy !== pvp.uid && !pvp.goneShown) opponentGone();
+  }
+
+  // ---- 試合のはじまり ----
+  async function beginPvpMatch(room) {
+    pvp.oppUid = pvp.isHost ? room.guestUid : room.hostUid;
+    pvp.oppName = pvp.isHost ? room.guestName : room.hostName;
+    pvp.hostName = room.hostName; pvp.guestName = room.guestName; pvp.seed = room.seed;
+    mySide = pvp.isHost ? 0 : 1;
+    const codes = partyCodes();
+    match = { pvp: true, oppName: pvp.oppName, maxGames: room.maxGames, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [],
+      herbs: 3 + player.carry.herbs, boost: player.carry.boost, carryBack: { herbs: player.carry.herbs, boost: player.carry.boost }, battleStarted: false };
+    match.carryText = [player.carry.herbs ? `薬草+${player.carry.herbs}` : '', player.carry.boost ? '経験値×2' : ''].filter(Boolean).join('・');
+    if (player.carry.herbs || player.carry.boost) { player.carry = { herbs: 0, boost: false }; await savePlayer(); }
+    const oppPub = pvp.isHost ? room.guestParty : room.hostParty;
+    // 相手の6体：姿と属性だけ（レベルとアイテムは、選出が決まるまで分からない）
+    match.foeBase = oppPub.map((p) => { const f = BB.makeFighter(BB.stickerDec(p.idx, p.kk, p.attr), null, 1); f.level = null; f.pub = true; return f; });
+    const mine0 = codes.map((c) => BB.makeFighter(BB.decode(c), null, dex[c].level));
+    await Promise.all(match.foeBase.map(async (f) => { f.canvas = await makeSticker(f, 160); }));
+    await Promise.all(codes.map(async (c, i) => { canvasCache[c] = await makeSticker(mine0[i], 160); }));
+    await nextPvpGame();
+  }
+  async function nextPvpGame() {
+    match.game++;
+    myParty = match.codes.map(memberFighter);
+    foeParty = match.foeBase;
+    picked = []; focusMine = 0; foeFocus = null;
+    pvp.oppDecided = false;
+    if (pvp.watchPicks) pvp.watchPicks.cancel();
+    pvp.watchPicks = Cloud.waitSub(pvp.rid, 'picks', `${match.game}_${pvp.oppUid}`);   // あいてが決めたかを、見張る（表示用）
+    pvp.watchPicks.promise.then((v) => { if (v) pvp.oppDecided = true; });
+    $('gameNo').textContent = `（${pvp.oppName} さんと対戦）` + (match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '') + (match.carryText ? `（持ち込み：${match.carryText}）` : '');
+    $('matchHist').textContent = match.foeUsedGames.length ? '　印G＝前の試合で出てきた' : '';
+    $('btnPick').textContent = 'この3体・この順番で決定';
+    renderPick(); show('preview');
+    startPickTimer();
+  }
+
+  // ---- 選出の送りあい ----
+  async function pvpGuard(fn) {
+    try { return await fn(); } catch (e) { if (e && (e.message === 'aborted' || e.message === 'timeout')) return undefined; throw e; }
+  }
+  // あいての入力が来るのを待つ。60秒こなければ「まだ待つ／退出」をたずねる。null=あいてがいない
+  async function waitOpp(sub, docId) {
+    for (;;) {
+      const w = Cloud.waitSub(pvp.rid, sub, docId, { timeoutMs: 60000 });
+      pvp.waiters.add(w);
+      const v = await w.promise;
+      pvp.waiters.delete(w);
+      if (v === undefined) {
+        const leave = await choose('あいてを待っています', [
+          { label: 'あいての入力が、まだ届きません。', value: 0, disabled: true },
+          { label: 'もう少し待つ', value: 0 }, { label: '退出する（この対戦は終わります）', value: 1 }]);
+        if (leave) { await leavePvp('left'); return null; }
+        continue;
+      }
+      return v;
+    }
+  }
+  async function confirmPickPvp() {
+    clearInterval(pickTimer);
+    const g = match.game;
+    const mineSim = picked.map((i) => { // 自分の戦士も、仕様から作り直す（あいての端末と、まったく同じものになる）
+      const f = BB.fighterFromSpec({ ...BB.specOf(myParty[i]) });
+      f.code = myParty[i].code; f.canvas = myParty[i].canvas; f.slot = i; return f;
+    });
+    $('btnPick').disabled = true; $('btnPick').textContent = 'あいての決定を待っています…';
+    try {
+      await Cloud.setSub(pvp.rid, 'picks', `${g}_${pvp.uid}`, { picks: mineSim.map((f) => ({ ...BB.specOf(f), slot: f.slot })), herbs: match.herbs });
+    } catch (e) { await pvpFail(e); return; }
+    const opp = await waitOpp('picks', `${g}_${pvp.oppUid}`);
+    if (!opp) return;
+    const foeList = opp.picks.map((sp) => {
+      const f = BB.fighterFromSpec(sp); f.canvas = foeParty[sp.slot].canvas; f.slot = sp.slot;
+      match.foeBase[sp.slot] = f; return f;                       // これで、あいてのレベルとアイテムが分かる（試合のあとの公開に使う）
+    });
+    const foeSel = opp.picks.map((sp) => sp.slot);
+    await revealSelections(mineSim, foeList);
+    match.battleStarted = true;
+    const res = await runPvpBattle(mineSim, foeList, opp.herbs);
+    if (res.type === 'gone') return;
+    await afterPvpGame(res, foeSel);
+  }
+
+  // ---- 入力の時間制限（通信対戦のターンだけ。時間切れは自動で「たたかう」） ----
+  let turnIv = null;
+  function stopTurnTimer() { clearInterval(turnIv); turnIv = null; turnExpired = false; $('turnTimer').textContent = ''; }
+  async function timedChoice(fn, fallback) {
+    let left = TURN_SECONDS; turnExpired = false;
+    const el = $('turnTimer');
+    const tick = () => { el.innerHTML = `⏱ のこり <b>${left}</b> 秒${left <= 10 ? '（時間切れは自動で「たたかう」）' : ''}`; el.classList.toggle('warnt', left <= 10); };
+    tick(); clearInterval(turnIv);
+    turnIv = setInterval(() => {
+      left--; tick();
+      if (left <= 10 && left > 0) beep(left <= 3 ? 1320 : 880);
+      if (left <= 0) { turnExpired = true; clearInterval(turnIv); cancelChoose('timeout'); }
+    }, 1000);
+    try { return await fn(); } catch (e) { if (e && e.message === 'timeout') return fallback(); throw e; } finally { stopTurnTimer(); }
+  }
+
+  // ---- 1試合の対戦（両方の端末で、同じ入力・同じ乱数で処理する） ----
+  async function runPvpBattle(mineList, foeList, oppHerbs) {
+    const g = match.game, me = mySide, opp = 1 - me;
+    const lists = me === 0 ? [mineList, foeList] : [foeList, mineList];
+    const herbs = me === 0 ? [match.herbs, oppHerbs] : [oppHerbs, match.herbs];
+    st = Battle.createBattle(Battle.createSide(pvp.hostName, lists[0], herbs[0]), Battle.createSide(pvp.guestName, lists[1], herbs[1]));
+    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: herbs.slice(), seen: [new Set([0]), new Set([0])], hist: [[], []] };
+    logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
+    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
+    show('battle'); renderBattle();
+    say(`${foeList[0].name} が勝負をしかけてきた！`); await sleep(700);
+    for (let t = 1; !st.over; t++) {
+      $('timeline').innerHTML = '';
+      const h0 = stateHash();
+      const myAct = await timedChoice(() => chooseAction(), () => ({ type: 'skill', skill: 'attack' }));
+      try { await Cloud.setSub(pvp.rid, 'turns', `${g}_${t}_${pvp.uid}`, { a: myAct, h: h0 }); } catch (e) { await pvpFail(e); return { type: 'gone' }; }
+      if (myAct.type === 'giveup') return { type: 'giveup', giver: me };
+      say('あいての入力を待っています…');
+      const oa = await waitOpp('turns', `${g}_${t}_${pvp.oppUid}`);
+      if (!oa) return { type: 'gone' };
+      if (oa.h !== undefined && oa.h !== h0 && window.__showErr) __showErr(`同期のずれを検出（ターン${t}）。両方の画面を更新してください`);
+      if (oa.a.type === 'giveup') return { type: 'giveup', giver: opp };
+      const actions = me === 0 ? [myAct, oa.a] : [oa.a, myAct];
+      await playEvents(Battle.resolveTurn(st, actions, rngFor(g, t)));
+      for (const s of Battle.needReplace(st)) {      // たおれたあとは、次に出すキャラを選ぶ（選ぶ側が送り、もう一方は待つ）
+        let to;
+        if (s === me) {
+          to = await timedChoice(async () => { let v = null; while (v === null) v = await pickBench('次に出すキャラを選んでください', false); return v; }, () => Battle.benchAlive(st.sides[me])[0]);
+          try { await Cloud.setSub(pvp.rid, 'rep', `${g}_${t}_${s}`, { to }); } catch (e) { await pvpFail(e); return { type: 'gone' }; }
+          if (to === 'giveup') return { type: 'giveup', giver: me };
+        } else {
+          const r = await waitOpp('rep', `${g}_${t}_${s}`);
+          if (!r) return { type: 'gone' };
+          if (r.to === 'giveup') return { type: 'giveup', giver: opp };
+          to = r.to;
+        }
+        await playEvents([Battle.replaceActive(st, s, to)]);
+      }
+      await sleep(250);
+    }
+    await sleep(500);
+    return { type: 'done', winner: st.winner };
+  }
+  async function afterPvpGame(res, foeSel) {
+    const me = mySide, need = match.maxGames === 1 ? 1 : 2;
+    match.foeUsedGames.push(foeSel);
+    picked.forEach((i) => match.played.add(match.codes[i]));
+    match.usedMine.push(...st.sides[me].usedItems); match.usedFoe.push(...st.sides[1 - me].usedItems);
+    if (res.type === 'giveup') {
+      if (res.giver === me) { await giveUpMatch(); return; }          // 自分があきらめた
+      match.wins = [need, 0]; await finishMatch(); return;           // あいてがあきらめた：自分の勝ち
+    }
+    if (res.winner === me) match.wins[0]++; else if (res.winner === 1 - me) match.wins[1]++;
+    if (match.wins[0] >= need || match.wins[1] >= need || match.game >= match.maxGames) { await finishMatch(); return; }
+    $('btEmo').textContent = res.winner === me ? '🏆' : res.winner === 1 - me ? '💀' : '🤝';
+    $('btTitle').textContent = `第${match.game}試合 ${res.winner === me ? 'しょうり！' : res.winner === 1 - me ? 'はいぼく…' : 'ひきわけ'}`;
+    $('btSub').textContent = `ここまで ${match.wins[0]}勝 ${match.wins[1]}敗（先に2勝で勝ち）`;
+    renderFoeReveal($('btFoe'));
+    show('between');
+  }
+
+  // ---- 退出・終わり ----
+  async function pvpEnd(reason) {
+    const p = pvp; if (!p) return;
+    pvp = null; mySide = 0; stopTurnTimer();
+    p.waiters.forEach((w) => w.cancel()); if (p.watchPicks) p.watchPicks.cancel();
+    p.unsub && p.unsub();
+    await Cloud.closeRoom(p.rid, reason || 'done');
+  }
+  async function leavePvp(reason) {            // 自分から抜ける：戦いが始まる前なら、持ち込み（薬草・ブースト）は返す
+    clearInterval(pickTimer);
+    if (match && !match.battleStarted && match.game <= 1 && (match.carryBack.herbs || match.carryBack.boost)) { player.carry = { ...match.carryBack }; await savePlayer(); }
+    await pvpEnd(reason || 'left');
+    match = null; renderWallet(); show('home');
+  }
+  async function opponentGone() {             // あいてが抜けた
+    if (!pvp || pvp.goneShown) return;
+    pvp.goneShown = true;
+    clearInterval(pickTimer); cancelChoose('aborted');
+    if (match && !match.battleStarted && match.game <= 1 && (match.carryBack.herbs || match.carryBack.boost)) { player.carry = { ...match.carryBack }; await savePlayer(); }
+    const p = pvp; pvp = null; mySide = 0; stopTurnTimer();
+    p.waiters.forEach((w) => w.cancel()); if (p.watchPicks) p.watchPicks.cancel(); p.unsub && p.unsub();
+    match = null; renderWallet(); show('home');
+    await cloudMsg('あいてが退出しました', 'この対戦は終わりました。経験値もお金も、もらえません。');
+  }
+  async function pvpFail(e) { await cloudMsg('通信できませんでした', Cloud.explain(e)); await leavePvp('left'); }
+
+  $('btnPvp').onclick = openLobby;
+  $('btnRoom1').onclick = () => hostRoom(1);
+  $('btnRoom3').onclick = () => hostRoom(3);
+  $('btnRoomCancel').onclick = cancelRoom;
+  $('btnLobbyRefresh').onclick = refreshLobby;
+  $('btnRoomJoin').onclick = () => { const v = $('inRoom').value.trim(); if (v) enterRoom(v); };
+  $('btnLobbyBack').onclick = async () => { await cancelRoom(); show('home'); };
 
   // ---------- お店（今日の品・売る・修行・持ち込み・見た目） ----------
   const TRAIN_DAILY_XP = 600, XP_PRICE = 2;               // 修行：1日600XPまで、1XP=2円
@@ -1116,7 +1406,7 @@
   }
 
   // ---------- ボタン ----------
-  $('btnAgain').onclick = () => startMatch(match ? match.maxGames : 1);
+  $('btnAgain').onclick = () => (match && match.pvp ? openLobby() : startMatch(match ? match.maxGames : 1));
   $('btnHome').onclick = () => { renderWallet(); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
@@ -1131,6 +1421,7 @@
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
+    ・「🌐 家族対戦」：家族クラウドにつないでいるユーザー同士で、それぞれの端末で対戦できます。部屋を作る／待っている部屋に入る／部屋コードで入る。毎ターンの入力は45秒、時間切れは自動で「たたかう」。「あきらめる」はあいての勝ち。<br>
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
     ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（1日600XPまで）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>

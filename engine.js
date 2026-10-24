@@ -76,7 +76,7 @@
     if (kind === 'char') {
       const idx = g(5) * 10 + g(6), c = DATA.chars[idx], kk = kirakiraOf(g(7) * 10 + g(8));
       return { ...base, idx, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth,
-        attr: g(9) % 5, kirakira: kk, limit: kk.limit };
+        attr: g(9) % 5, kirakira: kk, limit: kk.limit, kk: g(7) * 10 + g(8) };
     }
     const it = DATA.items[(g(5) * 100 + g(6) * 10 + g(7)) % DATA.items.length];
     return { ...base, itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) };
@@ -271,11 +271,20 @@
     return out;
   }
 
+  // ---- 通信対戦：シールの情報だけで、同じ戦士を両方の端末で作り直す ----
+  // 戦士の「仕様」：{ idx(キャラ), kk(キラキラ0〜99), attr(属性), level, item(アイテムID/null) }。バーコードそのものは送らない
+  function stickerDec(idx, kk, attr) {
+    const c = DATA.chars[idx], k = kirakiraOf(kk);
+    return { code: '', prefix: '', kind: 'char', idx, kk, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth, attr, kirakira: k, limit: k.limit };
+  }
+  const specOf = (f) => ({ idx: f.idx, kk: f.kk, attr: f.attr, level: f.level, item: f.item ? f.item.itemId : null });
+  const fighterFromSpec = (sp) => makeFighter(stickerDec(sp.idx, sp.kk, sp.attr), sp.item ? itemById(sp.item) : null, sp.level);
+
   const api = {
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, DATA,
+    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BB = api;
