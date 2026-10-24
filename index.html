@@ -47,7 +47,7 @@ button:disabled{opacity:.35}
 .meter .sweet{position:absolute;left:35%;width:30%;top:0;bottom:0;background:#3fb95044}
 .meter .mid{position:absolute;left:49%;width:2%;top:0;bottom:0;background:var(--hp)}
 .meter .mk{position:absolute;top:0;bottom:0;width:6px;margin-left:-3px;background:var(--acc)}
-video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover}
+video{display:block;width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover}
 .lib{display:flex;flex-direction:column;gap:6px}
 .lib button{text-align:left;width:100%;flex:none;margin:0}
 .big{font-size:56px;text-align:center;margin:8px 0}
@@ -155,6 +155,8 @@ body[data-frame="flame"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.
 body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #ff5f5f;animation:rbw 3s linear infinite}
 @keyframes rbw{0%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}20%{outline-color:#ffd24d;box-shadow:0 0 14px #ffd24d}40%{outline-color:#5fff8a;box-shadow:0 0 14px #5fff8a}60%{outline-color:#5fd2ff;box-shadow:0 0 14px #5fd2ff}80%{outline-color:#b06bff;box-shadow:0 0 14px #b06bff}100%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}}
 .warnt{color:var(--hp3)}
+.vwrap{position:relative}.guide{position:absolute;left:6%;right:6%;top:50%;height:0;border-top:2px solid rgba(255,70,70,.85);box-shadow:0 0 6px rgba(255,70,70,.7);pointer-events:none}.vwrap:before{content:'';position:absolute;left:4%;right:4%;top:30%;bottom:30%;border:2px dashed rgba(255,255,255,.45);border-radius:8px;pointer-events:none;z-index:1}
+.filebtn{flex:1;text-align:center;cursor:pointer;padding:10px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -210,7 +212,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10242345</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10242356</div>
 </section>
 
 <!-- お店 -->
@@ -321,7 +323,9 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 <!-- スキャンモーダル -->
 <div class="mask" id="scanMask"><div class="modal">
   <h2 style="margin:0 0 8px;font-size:16px">バーコードを写してください</h2>
-  <video id="video" playsinline muted></video>
+  <div class="vwrap"><video id="video" playsinline muted></video><div class="guide"></div></div>
+  <div class="row" id="scanTools" style="display:none;margin-top:8px"><button id="btnTorch">🔦 ライト</button><button id="btnZoom">🔍 ズーム</button></div>
+  <div class="row" style="margin-top:8px"><label class="filebtn">📷 写真で読む<input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none"></label></div>
   <p class="small" id="scanMsg"></p>
   <div class="row"><button id="scanClose">閉じる</button></div>
 </div></div>
@@ -343,11 +347,11 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10242345"></script>
-<script src="engine.js?v=10242345"></script>
-<script src="battle.js?v=10242345"></script>
-<script src="store.js?v=10242345"></script>
-<script src="cloud.js?v=10242345"></script>
-<script src="app.js?v=10242345"></script>
+<script src="data.js?v=10242356"></script>
+<script src="engine.js?v=10242356"></script>
+<script src="battle.js?v=10242356"></script>
+<script src="store.js?v=10242356"></script>
+<script src="cloud.js?v=10242356"></script>
+<script src="app.js?v=10242356"></script>
 </body>
 </html>

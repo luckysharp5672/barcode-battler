@@ -284,56 +284,114 @@
       document.head.appendChild(t);
     }));
   }
-  async function useDetector(kind, v) {
-    const det = new BarcodeDetector({ formats: ['ean_13'] });
-    scanning = true;
-    while (scanning) {
-      try {
-        const r = await det.detect(v);
-        if (r.length) { const raw = r[0].rawValue; closeScan(); acquire(kind, raw); return; }
-      } catch (e) { /* 読み取り失敗は無視して再試行 */ }
-      await sleep(250);
-    }
-  }
-  async function useZXing(kind, v) {
-    $('scanMsg').textContent = '読み取りの準備中…';
-    try { await loadZXing(); } catch (e) { $('scanMsg').textContent = '読み取りの部品を読み込めませんでした。数字を直接入力してください'; return; }
+  // 読み取りの方針：BarcodeDetector と ZXing の両方を使い、映像の「中央の帯」→「全体」…と、毎回ちがう切り出しで試す。
+  // カメラは高解像度・連続ピント。ライト・ズーム（対応端末のみ）と、写真から読み取る方法も用意している
+  let detector = null, track = null, scanKind = 'char';
+  function makeReader() {
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    const reader = new ZXing.MultiFormatReader();
-    reader.setHints(hints);
-    const cv = document.createElement('canvas');
-    const ctx = cv.getContext('2d', { willReadFrequently: true });
-    scanning = true;
-    $('scanMsg').textContent = 'バーコードを枠いっぱいに、明るい場所で写してください';
+    const reader = new ZXing.MultiFormatReader(); reader.setHints(hints); return reader;
+  }
+  // 画像（video / img）の一部（割合 rx,ry,rw,rh）を切り出して読む。大きすぎれば縮める。rot なら90度回して読む
+  async function decodeRegion(src, sw0, sh0, rx, ry, rw, rh, reader, cv, ctx, rot) {
+    const sx = rx * sw0, sy = ry * sh0, sw = rw * sw0, sh = rh * sh0;
+    const k = Math.min(1, 1400 / Math.max(sw, sh));
+    const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
+    if (rot) { cv.width = h; cv.height = w; ctx.setTransform(0, 1, -1, 0, h, 0); } else { cv.width = w; cv.height = h; ctx.setTransform(1, 0, 0, 1, 0, 0); }
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, w, h);
+    if (detector) {
+      try { const r = await detector.detect(cv); if (r.length) return r[0].rawValue; } catch (e) { /* 次へ */ }
+    }
+    if (reader) {
+      try {
+        const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));
+        return reader.decode(bmp).getText();
+      } catch (e) { /* 見つからない */ }
+    }
+    return null;
+  }
+  // 切り出しの候補：中央の帯（横長）→ 全体 → 中央の大きめの帯 → 縦向きのバーコード用（回転）→ 中央
+  const REGIONS = [[0.04, 0.3, 0.92, 0.4, false], [0, 0, 1, 1, false], [0.02, 0.18, 0.96, 0.64, false], [0.3, 0.04, 0.4, 0.92, true], [0.18, 0.2, 0.64, 0.6, false]];
+  async function scanLoop(kind, v) {
+    $('scanMsg').textContent = '読み取りの準備中…';
+    let reader = null;
+    try { await loadZXing(); reader = makeReader(); } catch (e) {
+      if (!detector) { $('scanMsg').textContent = '読み取りの部品を読み込めませんでした。数字を直接入力するか「写真で読む」を使ってください'; return; }
+    }
+    const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+    scanning = true; let n = 0, since = Date.now();
+    $('scanMsg').textContent = 'バーコードを赤い線にあわせて、ゆっくり近づけたり離したりしてください';
     while (scanning) {
       if (v.videoWidth) {
-        cv.width = v.videoWidth; cv.height = v.videoHeight;
-        ctx.drawImage(v, 0, 0);
-        try {
-          const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));
-          const raw = reader.decode(bmp).getText();
-          closeScan(); acquire(kind, raw); return;
-        } catch (e) { /* このコマには見つからない。次のコマへ */ }
+        const [rx, ry, rw, rh, rot] = REGIONS[n % REGIONS.length]; n++;
+        const raw = await decodeRegion(v, v.videoWidth, v.videoHeight, rx, ry, rw, rh, reader, cv, ctx, rot);
+        if (raw && scanning) { closeScan(); acquire(kind, raw); return; }
+        if (Date.now() - since > 12000) { since = Date.now(); $('scanMsg').textContent = 'うまく読めないときは：明るくする／ライトをつける／少し離す（10〜20cm）／下の「写真で読む」をためす'; }
       }
-      await sleep(150);
+      await sleep(60);
     }
   }
-  async function openScan(kind) {
-    $('scanMask').classList.add('on');
-    $('scanMsg').textContent = '';
+  async function readPhoto(file, kind) {
+    $('scanMsg').textContent = '写真を読んでいます…';
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）'; return; }
+      await loadZXing().catch(() => {});
+      const reader = window.ZXing ? makeReader() : null;
+      if (!detector && 'BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['ean_13'] }); } catch (e) { detector = null; } }
+      const img = new Image(), url = URL.createObjectURL(file);
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const tries = [[0, 0, 1, 1, false], [0.04, 0.3, 0.92, 0.4, false], [0.02, 0.18, 0.96, 0.64, false], [0, 0, 1, 1, true], [0.3, 0.04, 0.4, 0.92, true], [0.1, 0.1, 0.8, 0.8, false], [0, 0.25, 1, 0.5, false], [0, 0.4, 1, 0.3, false]];
+      for (const [rx, ry, rw, rh, rot] of tries) {
+        const raw = await decodeRegion(img, W, H, rx, ry, rw, rh, reader, cv, ctx, rot);
+        if (raw) { URL.revokeObjectURL(url); closeScan(); acquire(kind, raw); return; }
+      }
+      URL.revokeObjectURL(url);
+      $('scanMsg').textContent = '写真から読み取れませんでした。バーコード全体が大きく写り、ピントが合うように撮りなおしてください';
+    } catch (e) { $('scanMsg').textContent = '写真を読めませんでした。数字を直接入力してください'; }
+  }
+  async function openScan(kind) {
+    scanKind = kind;
+    $('scanMask').classList.add('on');
+    $('scanMsg').textContent = ''; $('scanTools').style.display = 'none';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）。下の「写真で読む」は使えます'; return; }
     const v = $('video');
     v.srcObject = stream; await v.play();
-    if ('BarcodeDetector' in window) await useDetector(kind, v); else await useZXing(kind, v);
+    track = stream.getVideoTracks()[0];
+    // 連続ピント・ライト・ズームに対応していれば使う
+    try {
+      const cap = track.getCapabilities ? track.getCapabilities() : {};
+      if (cap.focusMode && cap.focusMode.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      $('btnTorch').style.display = cap.torch ? '' : 'none';
+      $('btnZoom').style.display = cap.zoom ? '' : 'none';
+      $('scanTools').style.display = (cap.torch || cap.zoom) ? '' : 'none';
+    } catch (e) { /* 対応していない端末は、そのまま */ }
+    detector = null;
+    if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['ean_13'] }); } catch (e) { detector = null; } }
+    await scanLoop(kind, v);
   }
+  let torchOn = false, zoomStep = 0;
+  $('btnTorch').onclick = async () => {
+    if (!track) return; torchOn = !torchOn;
+    try { await track.applyConstraints({ advanced: [{ torch: torchOn }] }); $('btnTorch').textContent = torchOn ? '🔦 ライト：オン' : '🔦 ライト'; } catch (e) { torchOn = false; }
+  };
+  $('btnZoom').onclick = async () => {
+    if (!track) return;
+    try {
+      const z = track.getCapabilities().zoom; zoomStep = (zoomStep + 1) % 3;
+      await track.applyConstraints({ advanced: [{ zoom: z.min + (z.max - z.min) * [0, 0.25, 0.5][zoomStep] }] });
+      $('btnZoom').textContent = '🔍 ズーム ' + ['×1', '×2', '×3'][zoomStep];
+    } catch (e) { /* 非対応 */ }
+  };
+  $('scanFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) readPhoto(f, scanKind); };
   function closeScan() {
-    scanning = false;
+    scanning = false; torchOn = false; zoomStep = 0; track = null;
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
+    $('btnTorch').textContent = '🔦 ライト'; $('btnZoom').textContent = '🔍 ズーム';
     $('scanMask').classList.remove('on');
   }
   $('scanClose').onclick = closeScan;
