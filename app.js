@@ -83,17 +83,17 @@
     const e = Object.values(dex).find((x) => prefixOf(x.code) === prefixOf(code));
     if (!e) return { type: 'new' };
     if (e.lots.includes(code)) return { type: 'lotUsed', entry: e };
-    if (e.maxLv >= e.limit) return { type: 'lotMax', entry: e };
+    if (e.maxLv >= BB.MAX_LV) return { type: 'lotMax', entry: e };
     return { type: 'lot', entry: e };
   }
-  // 「対戦開始」で確定：新規登録 or 別ロットで限界Lv+5（キラキラの限界まで）
+  // 確定：新規登録 or 別ロットで限界Lv+5（最大Lv60まで）
   async function commitChar() {
     const s = slots.char, st = s.status;
     if (st.type === 'new') {
       const d = s.dec;
       if (dex[d.code]) return;
       dex[d.code] = { code: d.code, idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit,
-        xp: 0, level: 1, maxLv: BB.START_LIMIT, lots: [], wins: 0, losses: 0 };
+        xp: 0, level: 1, maxLv: d.limit, lots: [], wins: 0, losses: 0 };
       await Store.saveFighter(cur, dex[d.code]);
     } else if (st.type === 'lot') {
       if (st.entry.lots.includes(s.code)) return;
@@ -104,11 +104,11 @@
   }
   function statusText(st) {
     switch (st.type) {
-      case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${BB.START_LIMIT}）`;
+      case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${slots.char.dec ? slots.char.dec.limit : ''}）`;
       case 'known': return '';
       case 'lot': return `🎁 同じシールの別ロット！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, st.entry.lots.length + 1)}（入力を確定すると反映されます）`;
       case 'lotUsed': return `このバーコードは使用済みです。${st.entry.name} を呼び出しました`;
-      case 'lotMax': return `${st.entry.name} はすでにキラキラの限界Lv${st.entry.limit}です`;
+      case 'lotMax': return `${st.entry.name} はすでに最大の限界Lv${BB.MAX_LV}です`;
     }
   }
 
@@ -122,11 +122,11 @@
   const statGrid = (s) => `<div class="stat"><div><b>${s.hp}</b>HP</div><div><b>${s.st}</b>ST</div><div><b>${s.df}</b>DF</div><div><b>${s.dx}</b>DX</div><div><b>${s.sp}</b>特殊</div></div>`;
   function previewHtml(d, cap, entry) {
     if (d.kind === 'char') {
-      const A = BB.ATTRS[d.attr], lv = entry ? entry.level : 1, mx = entry ? entry.maxLv : BB.START_LIMIT;
+      const A = BB.ATTRS[d.attr], lv = entry ? entry.level : 1, mx = entry ? entry.maxLv : d.limit;
       return `<div class="stkwrap" id="stk${cap}"></div>
         <div class="nm">${A.emoji} ${d.name} <span class="small">${d.role}</span></div>
         <span class="tag">${A.name}属性</span><span class="tag">✨${d.kirakira.name}</span><span class="tag">${d.type}</span>
-        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（キラキラの上限 Lv${d.limit}）</div>
+        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}は最初から限界Lv${d.limit}。別ロットで+5、最大Lv${BB.MAX_LV}）</div>
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
@@ -185,7 +185,7 @@
     const st = s.status, name = s.dec.name, oldMax = st.entry ? st.entry.maxLv : 0;
     await commitChar();
     const e = dex[s.dec.code] || st.entry;
-    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（限界Lv${BB.START_LIMIT}）`
+    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（限界Lv${e.maxLv}）`
       : `🎁 同じシールの別ロット！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
     setSlot('char', s.code);
     $('iChar').textContent = msg;
@@ -830,7 +830,7 @@
       const base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
       const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
       const note = !capped ? `あと ${need - (e.xp - base)}`
-        : (e.maxLv < e.limit ? `限界です（別ロットで限界Lv+${BB.LOT_STEP}。上限 Lv${e.limit}）` : `最大 Lv${e.limit}`);
+        : (e.maxLv < BB.MAX_LV ? `限界です（別ロットで限界Lv+${BB.LOT_STEP}。最大 Lv${BB.MAX_LV}）` : `最大 Lv${BB.MAX_LV}`);
       return `<div style="margin-bottom:8px"><div class="rt">${m.name} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
         <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
     }).join('');
@@ -851,7 +851,7 @@
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
     ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
-    ・限界レベルは最初Lv5。同じシールの別ロットのバーコードで+5ずつ、キラキラの限界まで上がります。<br>
+    ・限界レベルは、キラキラで最初から決まります（ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）。同じシールの別ロットのバーコードで、さらに+5ずつ（最大Lv60）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
     ・対戦は「⚔ シングル（1本）」か「🏆 3本勝負（同じ6体で最大3試合、先に2勝）」。相手のパーティと見せ合い、制限時間60秒で戦う3体と、先発・控えの順番を決めます。見えるのは相手の6体の姿と属性だけです。<br>
     ・選ぶときは、カードをタップするとステータス・スキル・アイテムの詳細が出ます。「🔎 相性ヒント」をオンにすると、相手のカードをタップして、自分の6体の有利・不利を確かめられます。<br>

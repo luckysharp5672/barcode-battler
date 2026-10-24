@@ -107,7 +107,7 @@
 
   // ---- 育成 ----
   const MAX_LV = 60;
-  const START_LIMIT = 5; // 最初の限界レベル。別ロットのバーコードで+5ずつ、キラキラの限界まで
+  // 最初の限界レベル＝キラキラの値（ベーシック10〜レジェンド60）。同じシールの別ロットのバーコードで+5ずつ、最大Lv60まで
   const LOT_STEP = 5;
   const xpForLevel = (lv) => (25 * (lv - 1) * lv) / 2;
   function levelFromXp(xp, maxLv) {
@@ -116,7 +116,7 @@
     while (lv < cap && xp >= xpForLevel(lv + 1)) lv++;
     return lv;
   }
-  const maxLevelOf = (limit, lots) => Math.min(limit, START_LIMIT + LOT_STEP * lots);
+  const maxLevelOf = (limit, lots) => Math.min(MAX_LV, limit + LOT_STEP * lots);
   // レベルごとの能力（最大999）
   function statsAt(dec, lv) {
     const o = {};
@@ -243,7 +243,7 @@
 
   const api = {
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
-    MAX_LV, START_LIMIT, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
+    MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
     healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, DATA,
   };
