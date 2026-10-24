@@ -143,7 +143,7 @@
     for (let i = 0; i < bits.length; i++) if (bits[i] === '1') rects += `<rect x="${i}" y="0" width="1" height="40"/>`;
     return `<svg class="bar" viewBox="-6 -4 ${bits.length + 12} 48" preserveAspectRatio="none"><rect x="-6" y="-4" width="${bits.length + 12}" height="48" fill="#fff"/><g fill="#000">${rects}</g></svg>`;
   }
-  const statGrid = (s) => `<div class="stat"><div><b>${s.hp}</b>HP</div><div><b>${s.st}</b>ST</div><div><b>${s.df}</b>DF</div><div><b>${s.dx}</b>DX</div><div><b>${s.sp}</b>特殊</div></div>`;
+  const statGrid = (s) => `<div class="stat"><div><b>${s.hp}</b>❤️</div><div><b>${s.st}</b>⚔️</div><div><b>${s.df}</b>🛡️</div><div><b>${s.dx}</b>👟</div><div><b>${s.sp}</b>✨</div></div>`;
   function previewHtml(d, cap, entry) {
     if (d.kind === 'char') {
       const A = BB.ATTRS[d.attr], lv = entry ? entry.level : 1, mx = entry ? entry.maxLv : d.limit;
@@ -430,7 +430,7 @@
   const HINT_KEY = 'bb-hint';
   let hintOn = true;
   try { hintOn = localStorage.getItem(HINT_KEY) !== '0'; } catch (e) { /* 保存できなくても動く */ }
-  const STAT_NAMES = [['hp', 'HP'], ['st', 'ST'], ['df', 'DF'], ['dx', 'DX'], ['sp', '特殊']];
+  const STAT_NAMES = [['hp', '❤️'], ['st', '⚔️'], ['df', '🛡️'], ['dx', '👟'], ['sp', '✨']];
   const canvasCache = {};
 
   function detailHtml(f, foeAttrs) {
@@ -439,7 +439,7 @@
     const bars = STAT_NAMES.map(([k, n]) => `<div class="dbar"><span class="dn">${n}</span><div class="dtrack"><div style="width:${Math.min(100, sts[k] / 3)}%"></div></div><b>${sts[k]}</b></div>`).join('');
     const skills = Battle.SKILL_ORDER.filter((id) => id !== 'item' || f.consumable).map((id) => {
       const sk = Battle.SKILLS[id];
-      const extra = id === 'special' ? `（威力の目安 ${Math.round(f.sp * 2.2 + 5)}）` : (id === 'attack' || id === 'quick') ? `（STが基準。ST ${f.st}）` : '';
+      const extra = id === 'special' ? `（威力の目安 ${Math.round(f.sp * 2.2 + 5)}）` : (id === 'attack' || id === 'quick') ? `（⚔️が基準。⚔️ ${f.st}）` : '';
       return `<div class="dsk"><b>${sk.name}</b>${sk.pri ? ` <span class="tag">優先度${sk.pri > 0 ? '+' : ''}${sk.pri}</span>` : ''}<div class="small">${sk.desc}${extra}</div></div>`;
     }).join('');
     // 経験値：次のレベルまでの進み具合（図鑑にいる戦士だけ。相手のCPUには出さない）
@@ -462,7 +462,7 @@
     return `<div class="dhead"><div class="dstk"></div><div><div class="nm">${A.emoji} ${f.name}</div>
       <div class="small">${f.role}　${f.type}</div><div class="small">${A.name}属性${atk}${body}　✨${f.kirakira.name}</div>
       <div class="small">Lv${f.level} / 限界Lv${dex[f.code] ? dex[f.code].maxLv : f.limit}</div></div></div>
-      ${bars}${xpRow}<div class="small">体力 ${f.maxHp}（HP × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
+      ${bars}${xpRow}<div class="small">体力 ${f.maxHp}（❤️ × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
   }
   function fillDetail(box, f, foeAttrs) {
     box.innerHTML = detailHtml(f, foeAttrs);
@@ -716,7 +716,7 @@
       const dot = known ? `<span class="dot" style="background:${ATTR_COLORS[m.attr]}"></span>` : '<span class="dot" style="background:#555"></span>';
       return `<span class="chip ${i === idx ? 'on' : ''} ${dead ? 'dead' : ''}">${dot}${known ? m.name : '？'}${mine && !dead ? ` ${p}%` : ''}</span>`;
     }).join('');
-    const hpText = mine ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;
+    const hpText = mine ? `❤️ ${hp}/${f.maxHp}` : `❤️ ${Math.ceil(pct)}%`;
     const detail = mine
       ? `${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}`
       : `${A.emoji}${A.name}属性`;
@@ -746,7 +746,7 @@
     for (const e of events) {
       switch (e.t) {
         case 'order': { // 行動順のタイムライン：交代 → 優先度の高いスキル → DX
-          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === mySide ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・DX${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
+          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === mySide ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・👟${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
           e.list.forEach((x) => view.hist[x.s].push(x.label));
           renderBattle(); await sleep(500 + e.list.length * 350); break;
         }
@@ -779,7 +779,7 @@
     const side = st.sides[mySide];
     const opts = Battle.benchAlive(side).map((i) => {
       const f = side.party[i];
-      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　HP ${view.hp[mySide][i]}/${f.maxHp}`, value: i };
+      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　❤️ ${view.hp[mySide][i]}/${f.maxHp}`, value: i };
     });
     if (canCancel) opts.push({ label: '← 戻る', value: -1 });
     opts.push({ label: '🏳 あきらめる', value: -2 });
@@ -1416,7 +1416,8 @@
     ・対戦は「⚔ シングル（1本）」か「🏆 3本勝負（同じ6体で最大3試合、先に2勝）」。相手のパーティと見せ合い、制限時間60秒で戦う3体と、先発・控えの順番を決めます。見えるのは相手の6体の姿と属性だけです。<br>
     ・選ぶときは、カードをタップするとステータス・スキル・アイテムの詳細が出ます。「🔎 相性ヒント」をオンにすると、相手のカードをタップして、自分の6体の有利・不利を確かめられます。<br>
     ・3本勝負では、前の試合で相手が出したキャラに「G」の印が付きます。試合のあとに、相手のパーティが公開されます。<br>
-    ・毎ターン、自分と相手が<b>同時に</b>スキルか交代を決め、一斉に処理されます。順番は <b>交代 → 優先度の高いスキル → DXの高い順</b> です。<br>
+    ・毎ターン、自分と相手が<b>同時に</b>スキルか交代を決め、一斉に処理されます。順番は <b>交代 → 優先度の高いスキル → 👟の高い順</b> です。<br>
+    ・ステータスのマーク：❤️ たいりょく／⚔️ こうげき／🛡️ ぼうぎょ／👟 すばやさ（はやい人が先に動く）／✨ とくしゅ（特殊技の強さ）。<br>
     ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>

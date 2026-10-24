@@ -8,7 +8,7 @@
   const SKILLS = {
     attack: { id: 'attack', name: 'たたかう', pri: 0, kind: 'dmg', power: 1.0, desc: '通常攻撃（外れることがある）' },
     quick: { id: 'quick', name: 'クイック', pri: 1, kind: 'dmg', power: 0.6, desc: '先制の弱い一撃（優先度+1）' },
-    special: { id: 'special', name: '特殊技', pri: 0, kind: 'sp', desc: '特殊の値で攻撃。防御無視・必中。3ターンに1回' },
+    special: { id: 'special', name: '特殊技', pri: 0, kind: 'sp', desc: '✨の値で攻撃。防御無視・必中。3ターンに1回' },
     guard: { id: 'guard', name: 'ガード', pri: 3, kind: 'guard', desc: 'そのターンの攻撃を防ぐ（優先度+3）。連続では使えない' },
     herb: { id: 'herb', name: '薬草', pri: 0, kind: 'herb', desc: 'HPを20%回復（薬草1個。チームで3個）' },
     power: { id: 'power', name: 'パワーキー', pri: 0, kind: 'power', desc: '薬草1個で、運しだいの大回復（10〜84%）' },

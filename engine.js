@@ -47,11 +47,11 @@
   }
 
   function describeItem(e) {
-    const STAT = { hp: 'HP', st: 'ST', df: 'DF', dx: 'DX', sp: '特殊' };
+    const STAT = { hp: '❤️', st: '⚔️', df: '🛡️', dx: '👟', sp: '✨' };
     const STATUS = { poison: '毒', stun: '麻痺', sleep: '眠り' };
     if (e.kind === 'consumable') {
       const p = [];
-      if (e.heal_hp_pct) p.push(`HP${e.heal_hp_pct}%回復`);
+      if (e.heal_hp_pct) p.push(`❤️${e.heal_hp_pct}%回復`);
       if (e.heal_mp) p.push('特殊技がすぐ使える');
       if (e.cure) p.push('状態異常を治す');
       return '使い切り：' + p.join('・');
