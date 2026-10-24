@@ -913,7 +913,7 @@
     st = Battle.createBattle(Battle.createSide('あなた', mineList, match.herbs), Battle.createSide('てき', foeList));
     view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [match.herbs, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
-    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
+    $('starLine').textContent = '相性：矢印の元の属性が、先に強い（×1.5）。同じ属性は ×0.75。図をタップで大きく表示 →';
     show('battle'); renderBattle();
     say(`${foeList[0].name} が勝負をしかけてきた！`); await sleep(700);
     while (!st.over) {
@@ -1220,7 +1220,7 @@
     st = Battle.createBattle(Battle.createSide(pvp.hostName, lists[0], herbs[0]), Battle.createSide(pvp.guestName, lists[1], herbs[1]));
     view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: herbs.slice(), seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
-    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
+    $('starLine').textContent = '相性：矢印の元の属性が、先に強い（×1.5）。同じ属性は ×0.75。図をタップで大きく表示 →';
     show('battle'); renderBattle();
     say(`${foeList[0].name} が勝負をしかけてきた！`); await sleep(700);
     for (let t = 1; !st.over; t++) {
