@@ -66,6 +66,13 @@
       s, pri: SKILLS[actions[s].skill].pri, dx: actOf(st, s).dx, r: rng(),
     })).sort((x, y) => y.pri - x.pri || y.dx - x.dx || x.r - y.r);
 
+    // 行動順の記録（画面のタイムライン用）：交代 → 優先度の高いスキル → DX
+    ev.unshift({
+      t: 'order',
+      list: [0, 1].filter((x) => actions[x].type === 'switch' && ev.some((e) => e.t === 'switch' && e.s === x))
+        .map((x) => ({ s: x, kind: 'switch', label: '交代' }))
+        .concat(order.map((o) => ({ s: o.s, kind: 'skill', label: SKILLS[actions[o.s].skill].name, pri: o.pri, dx: o.dx }))),
+    });
     for (const o of order) {
       const s = o.s, side = st.sides[s], u = actOf(st, s), d = actOf(st, 1 - s), sk = SKILLS[actions[s].skill];
       if (!alive(u)) continue;

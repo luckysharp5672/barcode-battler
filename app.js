@@ -358,10 +358,12 @@
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
     if (inParty) {
+      mk('📋 詳細', () => showDetailModal(e.code));
       mk('🎁 アイテム', () => pickPartyItem(e.code));
       mk('外す', async () => { player.party.members = player.party.members.filter((c) => c !== e.code); delete player.party.items[e.code]; await savePlayer(); renderParty(); });
     } else {
       const dup = idxs.has(e.idx), full = partyCodes().length >= PARTY_MAX;
+      mk('📋 詳細', () => showDetailModal(e.code));
       mk(dup ? '同じキャラがいる' : full ? '満員' : '追加', async () => { player.party.members.push(e.code); await savePlayer(); renderParty(); }, dup || full);
     }
     return row;
@@ -391,20 +393,91 @@
   $('btnParty').onclick = openParty;
   $('btnPartyBack').onclick = () => show('home');
 
+  // ---------- キャラのステータス・能力の参照（選ぶときに見る） ----------
+  const ATTR_COLORS = ['#6fd6a5', '#c9a15a', '#58a6ff', '#ff7b72', '#f0b429']; // 風・土・水・炎・雷
+  const HINT_KEY = 'bb-hint';
+  let hintOn = true;
+  try { hintOn = localStorage.getItem(HINT_KEY) !== '0'; } catch (e) { /* 保存できなくても動く */ }
+  const STAT_NAMES = [['hp', 'HP'], ['st', 'ST'], ['df', 'DF'], ['dx', 'DX'], ['sp', '特殊']];
+  const canvasCache = {};
+
+  function detailHtml(f, foeAttrs) {
+    const A = BB.ATTRS[f.attr];
+    const sts = { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp };
+    const bars = STAT_NAMES.map(([k, n]) => `<div class="dbar"><span class="dn">${n}</span><div class="dtrack"><div style="width:${Math.min(100, sts[k] / 3)}%"></div></div><b>${sts[k]}</b></div>`).join('');
+    const skills = Battle.SKILL_ORDER.filter((id) => id !== 'item' || f.consumable).map((id) => {
+      const sk = Battle.SKILLS[id];
+      const extra = id === 'special' ? `（威力の目安 ${Math.round(f.sp * 2.2 + 5)}）` : (id === 'attack' || id === 'quick') ? `（STが基準。ST ${f.st}）` : '';
+      return `<div class="dsk"><b>${sk.name}</b>${sk.pri ? ` <span class="tag">優先度${sk.pri > 0 ? '+' : ''}${sk.pri}</span>` : ''}<div class="small">${sk.desc}${extra}</div></div>`;
+    }).join('');
+    const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b>：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
+    const atk = f.atkAttr !== f.attr ? `／攻撃の属性は${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? `／体の属性は${BB.ATTRS[f.bodyAttr].name}` : '';
+    let aff = '';
+    if (hintOn && foeAttrs) {
+      const adv = foeAttrs.filter((a) => BB.affinity(f.atkAttr, a) > 1).length, dis = foeAttrs.filter((a) => BB.affinity(a, f.bodyAttr) > 1).length;
+      aff = `<div class="small" style="margin-top:6px">🔎 相手の6体に対して：こちらの攻撃が有利 <b>${adv}</b>体／相手の攻撃が有利 <b>${dis}</b>体</div>`;
+    }
+    return `<div class="dhead"><div class="dstk"></div><div><div class="nm">${A.emoji} ${f.name}</div>
+      <div class="small">${f.role}　${f.type}</div><div class="small">${A.name}属性${atk}${body}　✨${f.kirakira.name}</div>
+      <div class="small">Lv${f.level} / 限界Lv${dex[f.code] ? dex[f.code].maxLv : f.limit}</div></div></div>
+      ${bars}<div class="small">体力 ${f.maxHp}（HP × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
+  }
+  function fillDetail(box, f, foeAttrs) {
+    box.innerHTML = detailHtml(f, foeAttrs);
+    const tok = box._tok = (box._tok || 0) + 1; // 速く切りかえたとき、古い画像があとから入らないようにする
+    makeSticker(f, 192).then((c) => { const t = box.querySelector('.dstk'); if (t && box._tok === tok) { t.innerHTML = ''; t.appendChild(c); } });
+  }
+  function showDetailModal(code) {
+    const id = player.party.items[code];
+    const f = BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
+    modal('<div id="dmBox"></div><button class="pri" style="width:100%;margin-top:10px" onclick="document.getElementById(\'modalMask\').classList.remove(\'on\')">閉じる</button>');
+    fillDetail($('dmBox'), f);
+  }
+
   // ---------- 見せ合い・選出（制限時間つき） ----------
-  let myParty = [], foeParty = [], picked = [], pickTimer = null;
+  let myParty = [], foeParty = [], picked = [], pickTimer = null, focusMine = 0, foeFocus = null, match = null;
+  let actx = null;
+  function beep(freq = 880, dur = 0.08) { // 残り時間の合図（鳴らせない環境では何もしない）
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.frequency.value = freq; g.gain.value = 0.05; o.connect(g); g.connect(actx.destination);
+      o.start(); o.stop(actx.currentTime + dur);
+    } catch (e) { /* 音が出なくても遊べる */ }
+  }
   function memberFighter(code) {
     const id = player.party.items[code];
-    return BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
+    let item = id ? BB.itemById(id) : null;
+    if (item && item.effect.kind === 'consumable' && match && match.usedMine.includes(id)) item = null; // 3本勝負：使い切りは使ったまま
+    const f = BB.makeFighter(BB.decode(code), item, dex[code].level);
+    if (canvasCache[code]) f.canvas = canvasCache[code];
+    return f;
   }
-  // hidden=true（相手の6体）は、姿（シール）と属性だけ。名前・レベル・アイテム・スキルは見せない
-  function pcard(f, onClick, hidden) {
+  function foeFresh(f) {
+    let it = f.item;
+    if (it && it.effect.kind === 'consumable' && match.usedFoe.includes(it.itemId)) it = null;
+    const n = BB.makeFighter(f, it, f.level);
+    n.canvas = f.canvas;
+    return n;
+  }
+  function hintFor(f) {
+    if (!hintOn) return '';
+    if (foeFocus !== null) {
+      const a = foeParty[foeFocus].attr, mine = BB.affinity(f.atkAttr, a), theirs = BB.affinity(a, f.bodyAttr);
+      const [tag, cls] = mine > 1 && theirs <= 1 ? ['◎ 有利', 'adv'] : theirs > 1 && mine <= 1 ? ['▼ 不利', 'dis'] : mine > 1 && theirs > 1 ? ['△ 撃ち合い', 'even'] : ['－ 互角', 'even'];
+      return `<div class="hint ${cls}">${tag}</div>`;
+    }
+    const adv = foeParty.filter((p) => BB.affinity(f.atkAttr, p.attr) > 1).length, dis = foeParty.filter((p) => BB.affinity(p.attr, f.bodyAttr) > 1).length;
+    return `<div class="hint even">有利${adv}／不利${dis}</div>`;
+  }
+  function pcard(f, { onClick, hidden, extra = '' } = {}) {
     const A = BB.ATTRS[f.attr];
     const el = document.createElement('div'); el.className = 'pcard';
     const th = document.createElement('div'); th.className = 'pth'; th.appendChild(f.canvas); el.appendChild(th);
     el.insertAdjacentHTML('beforeend', hidden
       ? `<div>${A.emoji} ${A.name}属性</div>`
       : `<div>${A.emoji} ${f.name}</div><div class="small">Lv${f.level}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`);
+    if (extra) el.insertAdjacentHTML('beforeend', extra);
     if (onClick) el.onclick = onClick;
     return el;
   }
@@ -415,19 +488,41 @@
     [picked[at], picked[to]] = [picked[to], picked[at]];
     renderPick();
   }
+  function renderAttrBar() {
+    const c = [0, 0, 0, 0, 0]; foeParty.forEach((f) => c[f.attr]++);
+    const bar = BB.ATTRS.map((A, i) => (c[i] ? `<i style="width:${c[i] / foeParty.length * 100}%;background:${ATTR_COLORS[i]}"></i>` : '')).join('');
+    const label = BB.ATTRS.map((A, i) => (c[i] ? `${A.emoji}${A.name}×${c[i]}` : '')).filter(Boolean).join('　');
+    $('attrBar').innerHTML = `<div class="abar">${bar}</div><div class="alabel">あいて：${label}</div>`;
+  }
   function renderPick() {
+    $('btnHint').textContent = `🔎 相性ヒント：${hintOn ? 'オン' : 'オフ'}`;
+    renderAttrBar();
     $('pvFoe').innerHTML = ''; $('pvMine').innerHTML = '';
-    foeParty.forEach((f) => $('pvFoe').appendChild(pcard(f, null, true)));
+    foeParty.forEach((f, i) => {
+      const marks = match ? match.foeUsedGames.map((g, k) => (g.includes(i) ? `<span class="gm">G${k + 1}</span>` : '')).join('') : '';
+      const el = pcard(f, { hidden: true, onClick: hintOn ? () => { foeFocus = foeFocus === i ? null : i; renderPick(); } : null });
+      if (hintOn && foeFocus === i) el.classList.add('foc');
+      if (marks) el.insertAdjacentHTML('afterbegin', `<span style="position:absolute;right:4px;top:4px;display:flex;gap:2px">${marks}</span>`);
+      $('pvFoe').appendChild(el);
+    });
+    const afs = foeParty.map((f) => f.attr);
     myParty.forEach((f, i) => {
-      const el = pcard(f, () => {
-        const at = picked.indexOf(i);
-        if (at >= 0) picked.splice(at, 1); else if (picked.length < PICK) picked.push(i);
-        renderPick();
-      });
       const at = picked.indexOf(i);
+      const el = pcard(f, { onClick: () => { focusMine = i; renderPick(); }, extra: hintFor(f) });
+      if (focusMine === i) el.classList.add('foc');
+      const tg = document.createElement('button'); tg.className = 'tg';
+      tg.textContent = at >= 0 ? '選出中（外す）' : '選ぶ';
+      tg.onclick = (ev) => {
+        ev.stopPropagation();
+        const k = picked.indexOf(i);
+        if (k >= 0) picked.splice(k, 1); else if (picked.length < PICK) picked.push(i);
+        focusMine = i; renderPick();
+      };
+      el.appendChild(tg);
       if (at >= 0) { el.classList.add('sel'); el.insertAdjacentHTML('afterbegin', `<span class="pk">${at + 1}</span>`); }
       $('pvMine').appendChild(el);
     });
+    fillDetail($('detailBox'), myParty[focusMine], afs);
     // 先発と控えの順番（▲▼で入れかえる）
     const box = $('pickOrder'); box.innerHTML = '';
     for (let k = 0; k < PICK; k++) {
@@ -443,7 +538,14 @@
     }
     $('btnPick').disabled = picked.length !== PICK;
   }
-  async function startSingle() {
+  $('btnHint').onclick = () => {
+    hintOn = !hintOn; foeFocus = null;
+    try { localStorage.setItem(HINT_KEY, hintOn ? '1' : '0'); } catch (e) { /* 保存できなくても動く */ }
+    renderPick();
+  };
+
+  // 試合の開始（games=1 でシングル、3 で3本勝負）
+  async function startMatch(games) {
     const codes = partyCodes();
     if (codes.length < PICK) {
       const v = await choose('パーティが足りません', [
@@ -452,17 +554,38 @@
       if (v) openParty();
       return;
     }
-    myParty = codes.map(memberFighter);
-    const avg = Math.round(myParty.reduce((a, f) => a + f.level, 0) / myParty.length);
-    foeParty = Battle.generateCpuParty(avg, rng, PARTY_MAX);
-    await Promise.all([...myParty, ...foeParty].map(async (f) => { f.canvas = await makeSticker(f, 160); }));
-    picked = [];
+    match = { maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [] };
+    const mine0 = codes.map((c) => BB.makeFighter(BB.decode(c), null, dex[c].level));
+    const avg = Math.round(mine0.reduce((a, f) => a + f.level, 0) / mine0.length);
+    match.foeBase = Battle.generateCpuParty(avg, rng, PARTY_MAX);
+    await Promise.all(match.foeBase.map(async (f) => { f.canvas = await makeSticker(f, 160); }));
+    await Promise.all(codes.map(async (c, i) => { canvasCache[c] = await makeSticker(mine0[i], 160); }));
+    await nextGame();
+  }
+  async function nextGame() {
+    match.game++;
+    myParty = match.codes.map(memberFighter);
+    foeParty = match.foeBase.map(foeFresh);
+    picked = []; focusMine = 0; foeFocus = null;
+    $('gameNo').textContent = match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '';
+    $('matchHist').textContent = match.foeUsedGames.length ? '　印G＝前の試合で出てきた' : '';
     renderPick(); show('preview');
+    startPickTimer();
+  }
+  function startPickTimer() {
     let left = PICK_SECONDS;
-    $('pickTimer').textContent = left;
-    clearInterval(pickTimer);
+    const decideAt = 6 + rng() * 35; // CPUの「決定ずみ」になるまでの秒数（見た目のための演出）
+    const ring = $('ring');
+    const tick = () => {
+      $('pickTimer').textContent = Math.max(0, left);
+      ring.style.setProperty('--p', Math.max(0, left) / PICK_SECONDS * 100);
+      ring.classList.toggle('warn', left <= 10);
+      $('foeState').textContent = PICK_SECONDS - left >= decideAt ? 'あいて：決定ずみ ✓' : 'あいて：選出中…';
+      if (left <= 10 && left > 0) beep(left <= 3 ? 1320 : 880);
+    };
+    clearInterval(pickTimer); tick();
     pickTimer = setInterval(() => {
-      left--; $('pickTimer').textContent = Math.max(0, left);
+      left--; tick();
       if (left <= 0) { // 時間切れ：レベルの高い順に自動で選ぶ
         const rest = myParty.map((f, i) => i).filter((i) => !picked.includes(i)).sort((a, b) => myParty[b].level - myParty[a].level);
         while (picked.length < PICK) picked.push(rest.shift());
@@ -470,13 +593,41 @@
       }
     }, 1000);
   }
-  function confirmPick() {
+
+  // 公開演出：カードがめくれて、先発だけが表になる（相手の控えは「？」のまま）
+  function revealSelections(mineList, foeList) {
+    return new Promise((res) => {
+      const build = (box, list, bench) => {
+        box.innerHTML = '';
+        list.forEach((f, k) => {
+          const el = document.createElement('div'); el.className = 'flip' + (k > 0 && !bench ? ' hid' : '');
+          el.innerHTML = '<div><div class="bk">⚪</div><div class="fr"></div></div>';
+          const c = document.createElement('canvas'); c.width = c.height = 160;
+          c.getContext('2d').drawImage(f.canvas, 0, 0, 160, 160);
+          el.querySelector('.fr').appendChild(c);
+          if (k > 0 && !bench) el.insertAdjacentHTML('beforeend', '<span class="qq">？</span>');
+          if (k === 0) el.insertAdjacentHTML('beforeend', '<span class="qq">先発</span>');
+          box.appendChild(el);
+        });
+      };
+      build($('rvFoe'), foeList, false); build($('rvMine'), mineList, true);
+      $('revealMask').classList.add('on');
+      setTimeout(() => { $('rvFoe').firstChild.classList.add('on'); $('rvMine').querySelectorAll('.flip').forEach((e) => e.classList.add('on')); }, 700);
+      setTimeout(() => { $('revealMask').classList.remove('on'); res(); }, 2300);
+    });
+  }
+  async function confirmPick() {
     clearInterval(pickTimer);
     const foeSel = Battle.cpuSelect(foeParty, myParty, PICK);
-    runBattle(picked.map((i) => myParty[i]), foeSel.map((i) => foeParty[i]));
+    const mineList = picked.map((i) => myParty[i]), foeList = foeSel.map((i) => foeParty[i]);
+    await revealSelections(mineList, foeList);
+    const winner = await runBattle(mineList, foeList);
+    await afterGame(winner, foeSel);
   }
   $('btnPick').onclick = confirmPick;
-  $('btnBattle').onclick = startSingle;
+  $('btnBattle').onclick = () => startMatch(1);
+  $('btnBo3').onclick = () => startMatch(3);
+  $('btnNext').onclick = nextGame;
 
   // ---------- 対戦（同時入力ターン制） ----------
   let st = null, view = null, logLines = [];
@@ -489,19 +640,23 @@
     const col = pct > 50 ? 'var(--hp)' : pct > 20 ? 'var(--hp2)' : 'var(--hp3)';
     const stt = Object.keys(f.status).filter((k) => f.status[k] > 0).map((k) => STATUS_JA[k]).join('・');
     const atk = f.atkAttr !== f.attr ? `（攻:${BB.ATTRS[f.atkAttr].name}）` : '', body = f.bodyAttr !== f.attr ? `（体:${BB.ATTRS[f.bodyAttr].name}）` : '';
+    // 控えのボール：自分は属性色・名前・HP%、相手は場に出てくるまで「？」
     const chips = side.party.map((m, i) => {
-      const known = s === 0 || view.seen[s].has(i);   // 相手の控えは、場に出てくるまで「？」
-      return `<span class="chip ${i === idx ? 'on' : ''} ${view.hp[s][i] <= 0 ? 'dead' : ''}">${known ? m.name : '？'}</span>`;
+      const known = s === 0 || view.seen[s].has(i);
+      const dead = view.hp[s][i] <= 0, p = Math.ceil(Math.max(0, view.hp[s][i]) / m.maxHp * 100);
+      const dot = known ? `<span class="dot" style="background:${ATTR_COLORS[m.attr]}"></span>` : '<span class="dot" style="background:#555"></span>';
+      return `<span class="chip ${i === idx ? 'on' : ''} ${dead ? 'dead' : ''}">${dot}${known ? m.name : '？'}${s === 0 && !dead ? ` ${p}%` : ''}</span>`;
     }).join('');
-    const hpText = s === 0 ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;                  // 相手のHPは%だけ
+    const hpText = s === 0 ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;
     const detail = s === 0
       ? `${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}`
-      : `${A.emoji}${A.name}属性`;                                                             // 相手の装備・スキルの状態は非公開
+      : `${A.emoji}${A.name}属性`;
+    const hist = s === 1 && view.hist[1].length ? `<div class="small">あいての直近：${view.hist[1].slice(-3).join('・')}</div>` : '';
     return `<div class="frow"><div class="stk"></div><div class="finfo">
       <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)} ${f.name}</span><span>Lv${f.level}</span></div>
       <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
       <div class="small">${hpText}${stt ? ' ／ 💫' + stt : ''}</div>
-      <div class="small">${detail}</div>
+      <div class="small">${detail}</div>${hist}
       <div class="chips">${chips}</div></div></div>`;
   }
   function renderBattle() {
@@ -521,6 +676,11 @@
   async function playEvents(events) {
     for (const e of events) {
       switch (e.t) {
+        case 'order': { // 行動順のタイムライン：交代 → 優先度の高いスキル → DX
+          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === 0 ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・DX${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
+          e.list.forEach((x) => view.hist[x.s].push(x.label));
+          renderBattle(); await sleep(500 + e.list.length * 350); break;
+        }
         case 'switch':
           say(`${sideName(e.s)}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
           view.active[e.s] = e.idx; view.seen[e.s].add(e.idx); renderBattle(); await sleep(700); break;
@@ -560,7 +720,7 @@
     for (;;) {
       const f = Battle.actOf(st, 0);
       const top = await choose(`${f.name} はどうする？`, [
-        { label: '⚔ スキル', value: 'skill' },
+        { label: '⚔ スキル（このキャラで継続）', value: 'skill' },
         { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[0]).length }]);
       if (top === 'skill') {
         const opts = Battle.availableSkills(st, 0).map((s) => ({
@@ -577,14 +737,16 @@
     }
   }
 
+  // 1試合の対戦。勝者（0=自分 1=相手 -1=引き分け）を返す
   async function runBattle(mineList, foeList) {
     st = Battle.createBattle(Battle.createSide('あなた', mineList), Battle.createSide('てき', foeList));
-    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3], seen: [new Set([0]), new Set([0])] };
-    logLines = [];
-    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）　交代 → 優先度の高いスキル → DXの高い順';
+    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
+    logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
+    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
     show('battle'); renderBattle();
     say(`${foeList[0].name} が勝負をしかけてきた！`); await sleep(700);
     while (!st.over) {
+      $('timeline').innerHTML = '';
       const mine = await chooseAction();            // 同時入力：相手の行動は見えない
       const foeAct = Battle.cpuAction(st, 1, rng);
       await playEvents(Battle.resolveTurn(st, [mine, foeAct], rng));
@@ -596,29 +758,52 @@
       await sleep(250);
     }
     await sleep(500);
-    await finishBattle();
+    return st.winner;
   }
 
-  // 結果：参加した3体に経験値、お金、まれにアイテム
-  async function finishBattle() {
-    const win = st.winner === 0, draw = st.winner === -1;
+  // 相手のパーティの公開（出した・出さなかった）
+  function renderFoeReveal(box) {
+    box.innerHTML = '';
+    match.foeBase.forEach((f, i) => {
+      const games = match.foeUsedGames.map((g, k) => (g.includes(i) ? `G${k + 1}` : '')).filter(Boolean);
+      const el = pcard(f, { extra: `<div class="small" style="color:${games.length ? 'var(--acc)' : 'var(--dim)'}">${games.length ? '出た ' + games.join('・') : '出番なし'}</div>` });
+      box.appendChild(el);
+    });
+  }
+  // 1試合が終わったあと：3本勝負なら次の試合へ、そうでなければ結果へ
+  async function afterGame(winner, foeSel) {
+    match.foeUsedGames.push(foeSel);
+    picked.forEach((i) => match.played.add(match.codes[i]));
+    match.usedMine.push(...st.sides[0].usedItems); match.usedFoe.push(...st.sides[1].usedItems);
+    if (winner === 0) match.wins[0]++; else if (winner === 1) match.wins[1]++;
+    const need = match.maxGames === 1 ? 1 : 2;
+    if (match.wins[0] >= need || match.wins[1] >= need || match.game >= match.maxGames) { await finishMatch(); return; }
+    $('btEmo').textContent = winner === 0 ? '🏆' : winner === 1 ? '💀' : '🤝';
+    $('btTitle').textContent = `第${match.game}試合 ${winner === 0 ? 'しょうり！' : winner === 1 ? 'はいぼく…' : 'ひきわけ'}`;
+    $('btSub').textContent = `ここまで ${match.wins[0]}勝 ${match.wins[1]}敗（先に2勝で勝ち）`;
+    renderFoeReveal($('btFoe'));
+    show('between');
+  }
+
+  // 結果：出場した戦士に経験値、お金、まれにアイテム
+  async function finishMatch() {
+    const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
     $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
     $('resTitle').textContent = win ? 'しょうり！' : draw ? 'ひきわけ' : 'はいぼく…';
-    const foeList = st.sides[1].party, mineList = st.sides[0].party;
-    const avgFoe = Math.round(foeList.reduce((a, f) => a + f.level, 0) / foeList.length);
-    $('resSub').textContent = win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた';
+    const avgFoe = Math.round(match.foeBase.reduce((a, f) => a + f.level, 0) / match.foeBase.length);
+    $('resSub').textContent = match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
     const members = [];
-    for (const f of mineList) {
-      const e = dex[f.code], oldLv = e.level, oldXp = e.xp;
+    for (const code of match.played) {
+      const e = dex[code], oldLv = e.level, oldXp = e.xp;
       e.xp = Math.min(e.xp + (win ? 30 + 5 * avgFoe : 10), BB.xpForLevel(e.maxLv));
       const gain = e.xp - oldXp;
       e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
       await Store.saveFighter(cur, e);
-      members.push({ name: f.name, oldLv, e, gain });
+      members.push({ name: e.name, oldLv, e, gain });
     }
     const gold = BB.rewardMoney(win, avgFoe, rng);
     player.money += gold;
-    for (const id of st.sides[0].usedItems) { // 使い切りのアイテムは、持ち物からへる
+    for (const id of match.usedMine) { // 使い切りのアイテムは、持ち物からへる
       player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
       for (const c of Object.keys(player.party.items)) if (player.party.items[c] === id) delete player.party.items[c];
     }
@@ -627,6 +812,8 @@
     await savePlayer();
     show('result');
     renderRewards({ members, gold, drop: dropId ? BB.itemById(dropId) : null });
+    $('foeRevealTitle').style.display = 'block';
+    renderFoeReveal($('foeReveal'));
   }
 
   // 報酬画面：経験値 → お金 → アイテム の順に、ひとつずつ現れる
@@ -659,14 +846,16 @@
   }
 
   // ---------- ボタン ----------
-  $('btnAgain').onclick = startSingle;
+  $('btnAgain').onclick = () => startMatch(match ? match.maxGames : 1);
   $('btnHome').onclick = () => { renderWallet(); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
     ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
     ・限界レベルは最初Lv5。同じシールの別ロットのバーコードで+5ずつ、キラキラの限界まで上がります。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
-    ・対戦は「⚔ シングルバトル」：相手のパーティと見せ合い、制限時間内に戦う3体を選びます。<br>
+    ・対戦は「⚔ シングル（1本）」か「🏆 3本勝負（同じ6体で最大3試合、先に2勝）」。相手のパーティと見せ合い、制限時間60秒で戦う3体と、先発・控えの順番を決めます。見えるのは相手の6体の姿と属性だけです。<br>
+    ・選ぶときは、カードをタップするとステータス・スキル・アイテムの詳細が出ます。「🔎 相性ヒント」をオンにすると、相手のカードをタップして、自分の6体の有利・不利を確かめられます。<br>
+    ・3本勝負では、前の試合で相手が出したキャラに「G」の印が付きます。試合のあとに、相手のパーティが公開されます。<br>
     ・毎ターン、自分と相手が<b>同時に</b>スキルか交代を決め、一斉に処理されます。順番は <b>交代 → 優先度の高いスキル → DXの高い順</b> です。<br>
     ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>

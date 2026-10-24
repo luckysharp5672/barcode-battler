@@ -89,6 +89,53 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 .orow .lb{flex:none;width:52px;font-size:12px;font-weight:700;color:var(--acc)}
 .orow .nm2{flex:1;min-width:0}
 .orow button{flex:none;min-height:34px;padding:4px 10px}
+
+.timerbar{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.ring{--p:100;width:64px;height:64px;border-radius:50%;flex:none;display:grid;place-items:center;background:conic-gradient(var(--acc) calc(var(--p)*1%),#21262d 0);position:relative}
+.ring::before{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--bg)}
+.ring span{position:relative;font-weight:800;font-size:20px}
+.ring.warn{background:conic-gradient(var(--hp3) calc(var(--p)*1%),#21262d 0);animation:pulse .5s infinite alternate}
+.ring.warn span{color:var(--hp3)}
+@keyframes pulse{to{transform:scale(1.08)}}
+.tinfo{flex:1;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.tinfo button{flex:none;min-height:36px;padding:4px 12px;font-size:13px}
+#attrBar{margin-bottom:8px}
+.abar{display:flex;height:14px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.abar i{display:block;height:100%}
+.alabel{font-size:13px;margin-top:4px}
+.pcard{cursor:pointer}
+.pcard.foc{outline:2px solid var(--me)}
+.pcard .hint{font-size:11px;margin-top:2px;font-weight:700}
+.pcard .hint.adv{color:var(--hp)}.pcard .hint.dis{color:var(--hp3)}.pcard .hint.even{color:var(--dim)}
+.pcard .tg{display:block;width:100%;margin-top:4px;min-height:32px;padding:3px;font-size:12px;flex:none}
+.pcard.sel .tg{background:var(--acc);color:#1a1300;border-color:var(--acc);font-weight:700}
+.pcard .gm{position:absolute;right:4px;top:4px;font-size:10px;background:#000a;border-radius:6px;padding:1px 5px}
+.dhead{display:flex;gap:12px;align-items:center;margin-bottom:8px}
+.dstk{width:96px;height:96px;flex:none;border-radius:10px;overflow:hidden;background:#0d1117}
+.dbar{display:flex;gap:8px;align-items:center;margin:3px 0;font-size:13px}
+.dbar .dn{width:34px;color:var(--dim)}.dbar b{width:38px;text-align:right}
+.dtrack{flex:1;height:8px;background:#0d1117;border-radius:4px;overflow:hidden;border:1px solid var(--line)}
+.dtrack>div{height:100%;background:linear-gradient(90deg,#58a6ff,#a371f7)}
+.dsk{padding:5px 0;border-top:1px solid var(--line);font-size:14px}
+#detailBox h3{margin:10px 0 2px;font-size:13px;color:var(--dim)}
+#timeline{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;min-height:0;margin-bottom:8px}
+.tl{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--panel);animation:rin .4s both}
+.tl.me{border-color:var(--me)}.tl.foe{border-color:var(--foe)}
+.tl em{font-style:normal;color:var(--dim);font-size:11px}
+.chip{display:inline-flex;gap:3px;align-items:center}
+.chip .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.reveal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;width:100%;max-width:440px}
+.rrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}
+.rvs{text-align:center;font-weight:800;color:var(--acc);margin:4px 0}
+.flip{perspective:600px;aspect-ratio:1}
+.flip>div{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .8s}
+.flip.on>div{transform:rotateY(180deg)}
+.flip .fr,.flip .bk{position:absolute;inset:0;backface-visibility:hidden;border-radius:10px;overflow:hidden;display:grid;place-items:center}
+.flip .bk{background:radial-gradient(circle at 35% 30%,#fff 0,#e5484d 18%,#8b1a1f 60%,#2a0507);font-size:26px;border:2px solid #000}
+.flip .fr{transform:rotateY(180deg);background:#0d1117}
+.flip .fr canvas{width:100%;height:100%}
+.flip.hid .bk{filter:grayscale(.3)}
+.flip .qq{position:absolute;bottom:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px #000}
 </style>
 </head>
 <body>
@@ -132,7 +179,8 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 
   <div class="row">
     <button id="btnParty">👥 パーティ編成</button>
-    <button class="pri" id="btnBattle">⚔ シングルバトル</button>
+    <button class="pri" id="btnBattle">⚔ シングル（1本）</button>
+    <button class="pri" id="btnBo3">🏆 3本勝負</button>
   </div>
   <div class="row"><button id="btnHelp">📖 あそびかた</button></div>
 </section>
@@ -147,19 +195,36 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 
 <!-- 見せ合い・選出 -->
 <section id="preview" class="screen">
-  <h1>🔍 見せ合い・選出</h1>
-  <p class="sub">見えるのは相手の6体の<b>姿と属性だけ</b>（名前・レベル・アイテム・スキルは非公開）。相手を見ながら、戦わせる3体を選び、<b>先発と控えの順番</b>を決めます。のこり <b id="pickTimer">60</b> 秒</p>
-  <h2 class="small">あいて（6体）</h2>
+  <h1>🔍 見せ合い・選出 <span class="small" id="gameNo"></span></h1>
+  <p class="sub">見えるのは相手の6体の<b>姿と属性だけ</b>（名前・レベル・アイテム・スキルは非公開）。戦わせる<b>3体</b>を選び、<b>先発と控えの順番</b>を決めます。</p>
+  <div class="timerbar">
+    <div class="ring" id="ring"><span id="pickTimer">60</span></div>
+    <div class="tinfo"><div class="small" id="foeState">あいて：選出中…</div><button id="btnHint">🔎 相性ヒント：オン</button></div>
+  </div>
+  <h2 class="small">あいて（6体）<span id="matchHist"></span></h2>
+  <div id="attrBar"></div>
   <div class="pgrid" id="pvFoe"></div>
-  <h2 class="small">あなた（タップで3体を選ぶ）</h2>
+  <h2 class="small">あなた（カードをタップで詳しく見る／「選ぶ」で選出）</h2>
   <div class="pgrid" id="pvMine"></div>
+  <div class="card" id="detailBox"><p class="small">キャラのカードをタップすると、ステータスとスキルがここに出ます</p></div>
   <div id="pickOrder"></div>
   <div class="row"><button class="pri" id="btnPick" disabled>この3体・この順番で決定</button></div>
+</section>
+
+<!-- 3本勝負：試合のあいだ -->
+<section id="between" class="screen">
+  <div class="big" id="btEmo">⚔</div>
+  <h1 id="btTitle" style="text-align:center"></h1>
+  <p class="sub" id="btSub" style="text-align:center"></p>
+  <h2 class="small">あいてのパーティ（公開）</h2>
+  <div class="pgrid" id="btFoe"></div>
+  <div class="row"><button class="pri" id="btnNext">次の試合へ（選出から）</button></div>
 </section>
 
 <!-- 対戦 -->
 <section id="battle" class="screen">
   <div class="starline" id="starLine"></div>
+  <div id="timeline"></div>
   <div class="card fighter" id="foeCard"></div>
   <div class="log" id="log"></div>
   <div class="card fighter" id="meCard"></div>
@@ -172,9 +237,18 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   <h1 id="resTitle" style="text-align:center"></h1>
   <p class="sub" id="resSub" style="text-align:center"></p>
   <div id="rewards"></div>
+  <h2 class="small" id="foeRevealTitle" style="display:none">あいてのパーティ（公開）</h2>
+  <div class="pgrid" id="foeReveal"></div>
   <div class="row"><button class="pri" id="btnAgain">もう一度（同じパーティ）</button></div>
   <div class="row"><button id="btnHome">ホームへ</button></div>
 </section>
+
+<!-- 選出の公開演出 -->
+<div class="mask" id="revealMask"><div class="reveal">
+  <div class="small" style="text-align:center">あいて</div><div class="rrow" id="rvFoe"></div>
+  <div class="rvs">VS</div>
+  <div class="rrow" id="rvMine"></div><div class="small" style="text-align:center">あなた</div>
+</div></div>
 
 <!-- スキャンモーダル -->
 <div class="mask" id="scanMask"><div class="modal">
