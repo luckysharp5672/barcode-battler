@@ -33,10 +33,10 @@
     if (/^9784/.test(s)) return 'item';
     return null;
   }
-  // 同じキャラ（シール）を表すキー。45と49は同じ扱い
+  // 同じシール（キャラ・キラキラ・属性が同じ）を表すキー。45と49は同じ扱い。戦士は ⑤〜⑨ の5桁で決まるので、③④は見ない
   function identityKey(code) {
     const s = String(code);
-    return prefixKind(s) === 'char' ? '4x' + s.slice(2, 7) : s.slice(0, 7);
+    return prefixKind(s) === 'char' ? '4x' + s.slice(4, 9) : s.slice(0, 7);
   }
 
   // ⑤⑥（00〜99）→ キラキラの種類（限界レベルを表す）
@@ -64,8 +64,9 @@
     return p.join('、') || '-';
   }
 
-  // バーコード → 戦士（シール）／アイテム。使うのは先頭7桁だけ
-  //   戦士: ③④=キャラ(00〜99)、⑤⑥=キラキラ、⑦=属性(% 5)    アイテム(9784): ⑤⑥⑦=000〜999 → 番号 % 68
+  // バーコード → 戦士（シール）／アイテム
+  //   戦士(45/49): ⑤⑥=キャラ(00〜99)、⑦⑧=キラキラ(00〜99)、⑨=属性(% 5)。③④は使わない
+  //   アイテム(9784): ⑤⑥⑦=000〜999 → 番号 % 68
   function decode(code) {
     if (!isValidJan(code)) return null;
     const kind = prefixKind(code);
@@ -73,9 +74,9 @@
     const s = String(code), g = (n) => +s[n - 1];
     const base = { code: s, prefix: identityKey(s), kind };
     if (kind === 'char') {
-      const idx = g(3) * 10 + g(4), c = DATA.chars[idx], kk = kirakiraOf(g(5) * 10 + g(6));
+      const idx = g(5) * 10 + g(6), c = DATA.chars[idx], kk = kirakiraOf(g(7) * 10 + g(8));
       return { ...base, idx, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth,
-        attr: g(7) % 5, kirakira: kk, limit: kk.limit };
+        attr: g(9) % 5, kirakira: kk, limit: kk.limit };
     }
     const it = DATA.items[(g(5) * 100 + g(6) * 10 + g(7)) % DATA.items.length];
     return { ...base, itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) };
