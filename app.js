@@ -9,7 +9,7 @@
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
   let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
   // お金・持ち物・手に入れた書籍のコード・パーティ・お店（今日の購入/修行・持ち込み・見た目）
-  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} }, shop: { date: '', bought: [] }, train: { date: '', xp: 0 }, carry: { herbs: 0, boost: false }, cosmetics: { titles: [], title: '', frames: [], frame: '' } };
+  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} }, shop: { date: '', bought: [] }, train: { date: '', xp: 0 }, carry: { herbs: 0, boost: false }, xp2: '', cosmetics: { titles: [], title: '', frames: [], frame: '' } };
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -948,6 +948,7 @@
   }
 
   // 結果：出場した戦士に経験値、お金、まれにアイテム
+  const RESERVE_XP = 0.7;
   async function finishMatch() {
     const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
     $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
@@ -955,14 +956,17 @@
     const known = match.foeBase.filter((f) => f.level != null);   // 通信対戦：あいてが出してきた戦士のレベルだけ分かる
     const avgFoe = known.length ? Math.round(known.reduce((a, f) => a + f.level, 0) / known.length) : 1;
     $('resSub').textContent = match.pvp ? `${match.oppName} さんとの対戦：${match.wins[0]}勝 ${match.wins[1]}敗` : match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
-    const members = [];
-    for (const code of match.played) {
-      const e = dex[code], oldLv = e.level, oldXp = e.xp;
-      e.xp = Math.min(e.xp + (win ? 30 + 5 * avgFoe : 10) * (match.boost ? 2 : 1), BB.xpForLevel(e.maxLv));
+    const members = [], boost2 = !!match.boost || player.xp2 === today();
+    const baseXp = (win ? 30 + 5 * avgFoe : 10) * (boost2 ? 2 : 1);
+    // 出場した3体は満額、出番のなかった控えは7割
+    for (const code of match.codes) {
+      const e = dex[code]; if (!e) continue;
+      const played = match.played.has(code), oldLv = e.level, oldXp = e.xp;
+      e.xp = Math.min(e.xp + Math.round(baseXp * (played ? 1 : RESERVE_XP)), BB.xpForLevel(e.maxLv));
       const gain = e.xp - oldXp;
-      e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
+      e.level = BB.levelFromXp(e.xp, e.maxLv); if (played) e[win ? 'wins' : 'losses']++;
       await Store.saveFighter(cur, e);
-      members.push({ name: e.name, oldLv, e, gain });
+      members.push({ name: e.name, oldLv, e, gain, reserve: !played });
     }
     const gold = BB.rewardMoney(win, avgFoe, rng);
     player.money += gold;
@@ -974,7 +978,7 @@
     if (dropId) player.bag[dropId] = (player.bag[dropId] || 0) + 1;
     await savePlayer();
     show('result');
-    renderRewards({ members, gold, boost: match.boost, drop: dropId ? BB.itemById(dropId) : null });
+    renderRewards({ members, gold, boost: boost2, drop: dropId ? BB.itemById(dropId) : null });
     $('foeRevealTitle').style.display = 'block';
     renderFoeReveal($('foeReveal'));
     if (pvp) await pvpEnd('done');
@@ -995,7 +999,7 @@
       const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
       const note = !capped ? `あと ${need - (e.xp - base)}`
         : (e.maxLv < BB.MAX_LV ? `限界です（別ロットで限界Lv+${BB.LOT_STEP}。最大 Lv${BB.MAX_LV}）` : `最大 Lv${BB.MAX_LV}`);
-      return `<div style="margin-bottom:8px"><div class="rt">${m.name} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
+      return `<div style="margin-bottom:8px"><div class="rt">${m.name}${m.reserve ? ' <span class="tag">控え 7割</span>' : ''} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
         <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
     }).join('');
     add(`<div class="ic">⭐</div><div class="rb"><div class="rt" style="margin-bottom:6px">経験値${r.boost ? ' <span class="tag">ブースト×2</span>' : ''}</div>${rows}</div>`);
@@ -1279,7 +1283,7 @@
 
   // ---------- お店（今日の品・売る・修行・持ち込み・見た目） ----------
   const TRAIN_DAILY_XP = 600, XP_PRICE = 2;               // 修行：1日600XPまで、1XP=2円
-  const CARRY_HERB_PRICE = 120, CARRY_HERB_MAX = 2, BOOST_PRICE = 250;
+  const CARRY_HERB_PRICE = 120, CARRY_HERB_MAX = 2, BOOST_PRICE = 250, DAY_BOOST_PRICE = 700;
   const TITLES = [
     { id: 'hunter', name: 'バーコードハンター', price: 300 }, { id: 'collector', name: 'シールコレクター', price: 500 },
     { id: 'reader', name: '読み合いの達人', price: 1000 }, { id: 'master', name: '属性マスター', price: 1500 },
@@ -1383,11 +1387,16 @@
   }
   // 🎒 持ち込み：次の試合だけ有効（試合を始めると使われる）
   function shopCarry(box) {
-    box.insertAdjacentHTML('beforeend', '<p class="small">買った分は、<b>次の試合だけ</b>有効です（試合を始めると使われます。3本勝負なら、その3試合ぶん）。</p>');
+    box.insertAdjacentHTML('beforeend', '<p class="small">薬草と「経験値ブースト」は<b>次の試合だけ</b>有効です（試合を始めると使われます。3本勝負なら、その3試合ぶん）。「きょう1日」は、きょう中の全部の試合で有効です。</p>');
     const c = player.carry;
     srow(box, {
       html: `<b>🌿 薬草 +1</b><div class="small">薬草が3個→4個（最大+${CARRY_HERB_MAX}まで）。いま +${c.herbs}</div><div>${yen(CARRY_HERB_PRICE)}</div>`,
       buttons: [['買う', async () => { c.herbs++; await pay(CARRY_HERB_PRICE); shopMsg('🌿 薬草を持ち込みます（次の試合）'); renderShop(); }, c.herbs >= CARRY_HERB_MAX || player.money < CARRY_HERB_PRICE]],
+    });
+    const dayOn = player.xp2 === today();
+    srow(box, {
+      html: `<b>🌟 きょう1日 経験値ブースト</b><div class="small">きょう（夜12時まで）の試合は、ずっと経験値が×2${dayOn ? '　<span class="tag">きょうは有効</span>' : ''}</div><div>${yen(DAY_BOOST_PRICE)}</div>`,
+      buttons: [[dayOn ? '有効中' : '買う', async () => { player.xp2 = today(); await pay(DAY_BOOST_PRICE); shopMsg('🌟 きょう1日、経験値が2倍になります'); renderShop(); }, dayOn || player.money < DAY_BOOST_PRICE]],
     });
     srow(box, {
       html: `<b>⏫ 経験値ブースト</b><div class="small">次の試合で、出場したキャラの経験値が×2${c.boost ? '　<span class="tag">予約中</span>' : ''}</div><div>${yen(BOOST_PRICE)}</div>`,
@@ -1484,7 +1493,7 @@
     ・ステータスのマーク：❤️ たいりょく／⚔️ こうげき／🛡️ ぼうぎょ／👟 すばやさ（はやい人が先に動く）／✨ とくしゅ（特殊技の強さ）。<br>
     ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
-    ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
+    ・戦いのあとに、経験値（参加した3体は全部、控えの3体は7割）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
     ・「🌐 家族対戦」：家族クラウドにつないでいるユーザー同士で、それぞれの端末で対戦できます。部屋を作る／待っている部屋に入る／部屋コードで入る。毎ターンの入力は45秒、時間切れは自動で「たたかう」。「あきらめる」はあいての勝ち。<br>
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>

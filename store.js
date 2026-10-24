@@ -45,12 +45,13 @@
         shop: p.shop || { date: '', bought: [] },                       // 今日買った品
         train: p.train || { date: '', xp: 0 },                          // 今日の修行の合計
         carry: p.carry || { herbs: 0, boost: false },                   // 次の試合への持ち込み
+        xp2: p.xp2 || '',                                               // 「きょう1日 経験値2倍」が有効な日付
         cosmetics: p.cosmetics || { titles: [], title: '', frames: [], frame: '' },
       };
     },
     async setPlayer(pid, pl) {
       const d = read(); if (!d.profiles[pid]) return;
-      Object.assign(d.profiles[pid], { money: pl.money, bag: pl.bag, itemCodes: pl.itemCodes, party: pl.party, shop: pl.shop, train: pl.train, carry: pl.carry, cosmetics: pl.cosmetics });
+      Object.assign(d.profiles[pid], { money: pl.money, bag: pl.bag, itemCodes: pl.itemCodes, party: pl.party, shop: pl.shop, train: pl.train, carry: pl.carry, xp2: pl.xp2 || '', cosmetics: pl.cosmetics });
       commit(d, pid);
     },
     // 今日のランダム（戦士・アイテムそれぞれ1日1回）の記録 { char: {date, code}, item: {date, code} }
