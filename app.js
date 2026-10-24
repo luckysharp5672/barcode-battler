@@ -199,7 +199,7 @@
     const s = slots[kind];
     if (kind === 'item') { // 書籍：持ち物に入れる（同じバーコードは1回だけ）
       if (!s.dec) return;
-      if (player.itemCodes.includes(code)) { $('iItem').textContent = 'このバーコードは、すでに使用済みです（持ち物に入っています）'; return; }
+      if (player.itemCodes.includes(code)) { $('iItem').textContent = 'このバーコードは、すでに使用済みです（一度読み取ったバーコードは、売ったあとでも使えません）'; return; }
       player.itemCodes.push(code); player.bag[s.dec.itemId] = (player.bag[s.dec.itemId] || 0) + 1;
       await savePlayer();
       $('iItem').textContent = `🎁 ${s.dec.name} を持ち物に入れました！`;
