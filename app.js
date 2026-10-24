@@ -5,11 +5,10 @@
   const STATUS_JA = { poison: '毒', stun: '麻痺' };
 
   const slots = { char: { code: '', dec: null }, item: { code: '', dec: null } };
-  let last = null; // 再戦用 { chDec, itDec }
   let cur = null;  // 現在の家族プロフィールID
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
   let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
-  let player = { money: 0, bag: {} }; // お金と持ち物
+  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} } }; // お金・持ち物・手に入れた書籍のコード・パーティ
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -68,6 +67,7 @@
       const keep = e.xp > o.xp ? e : o;
       delete dex[(keep === e ? o : e).code]; seen[k] = keep;
     });
+    cleanParty();
     setSlot('char', ''); setSlot('item', '');
   }
   $('profSel').onchange = async (e) => { await Store.setCurrent(e.target.value); await loadProfiles(); };
@@ -106,7 +106,7 @@
     switch (st.type) {
       case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${BB.START_LIMIT}）`;
       case 'known': return '';
-      case 'lot': return `🎁 同じシールの別ロット！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, st.entry.lots.length + 1)}（対戦開始で確定）`;
+      case 'lot': return `🎁 同じシールの別ロット！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, st.entry.lots.length + 1)}（入力を確定すると反映されます）`;
       case 'lotUsed': return `このバーコードは使用済みです。${st.entry.name} を呼び出しました`;
       case 'lotMax': return `${st.entry.name} はすでにキラキラの限界Lv${st.entry.limit}です`;
     }
@@ -168,12 +168,19 @@
       }
     } else if (s.code.length > 0) $('w' + cap).textContent = `13桁のJANコードだけ使えます（いま${s.code.length}桁）`;
     if (preview) makeSticker(preview).then((c) => { const box = $('stk' + cap); if (box && s.dec === preview) box.appendChild(c); });
-    $('btnStart').disabled = !slots.char.dec || (slots.item.code && !slots.item.dec);
   }
   // 戦士を手に入れた（スキャン・ランダム・入力の確定）ときに、すぐ図鑑へ登録する／別ロットなら限界Lvを上げる
   async function acquire(kind, code) {
     setSlot(kind, code);
     const s = slots[kind];
+    if (kind === 'item') { // 書籍：持ち物に入れる（同じバーコードは1回だけ）
+      if (!s.dec) return;
+      if (player.itemCodes.includes(code)) { $('iItem').textContent = 'このバーコードは、すでに使用済みです（持ち物に入っています）'; return; }
+      player.itemCodes.push(code); player.bag[s.dec.itemId] = (player.bag[s.dec.itemId] || 0) + 1;
+      await savePlayer();
+      $('iItem').textContent = `🎁 ${s.dec.name} を持ち物に入れました！`;
+      return;
+    }
     if (kind !== 'char' || !s.status || (s.status.type !== 'new' && s.status.type !== 'lot')) return;
     const st = s.status, name = s.dec.name, oldMax = st.entry ? st.entry.maxLv : 0;
     await commitChar();
@@ -186,6 +193,7 @@
   $('inChar').addEventListener('input', (e) => setSlot('char', e.target.value));
   $('inChar').addEventListener('change', (e) => acquire('char', e.target.value));
   $('inItem').addEventListener('input', (e) => setSlot('item', e.target.value));
+  $('inItem').addEventListener('change', (e) => acquire('item', e.target.value));
   // ランダムは、戦士・アイテムそれぞれ1日1回（端末の日付で切り替わる）。2回目以降は今日のコードを入れ直すだけ
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const usedToday = (kind) => !!(daily[kind] && daily[kind].date === today());
@@ -214,25 +222,15 @@
   const bagCount = () => Object.values(player.bag).reduce((a, b) => a + b, 0);
   function renderWallet() { $('wallet').textContent = `💰 ${player.money.toLocaleString()}　🎒 持ち物 ${bagCount()}個`; }
   async function savePlayer() { await Store.setPlayer(cur, player); renderWallet(); }
-  function setBagItem(id) {
-    setSlot('item', '');
-    const dec = BB.itemById(id), s = slots.item;
-    s.dec = dec; s.bagId = id;
-    $('pvItem').innerHTML = previewHtml(dec, 'Item');
-    makeSticker(dec).then((c) => { const box = $('stkItem'); if (box && s.dec === dec) box.appendChild(c); });
-    $('iItem').textContent = '🎒 持ち物から使います（対戦開始で1個へります）';
-    $('btnStart').disabled = !slots.char.dec;
-  }
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
-    if (!ids.length) { await choose('持ち物', [{ label: 'まだありません。対戦に勝つと、まれに手に入ります', value: 0, disabled: true }, { label: '← 戻る', value: 0 }]); return; }
-    const opts = ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name} ×${player.bag[id]}<br><span class="small">${d.text}</span>`, value: id }; });
+    const opts = ids.length
+      ? ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name} ×${player.bag[id]}<br><span class="small">${d.text}</span>`, value: 0, disabled: true }; })
+      : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
     opts.push({ label: '← 戻る', value: 0 });
-    const id = await choose('持ち物（使うと1個へります）', opts);
-    if (id) setBagItem(id);
+    await choose('持ち物（パーティ編成で持たせられます）', opts);
   }
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
-  document.querySelectorAll('[data-clear]').forEach((b) => b.onclick = () => setSlot(b.dataset.clear, ''));
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
   document.querySelectorAll('[data-scan]').forEach((b) => b.onclick = () => openScan(b.dataset.scan));
 
@@ -333,97 +331,272 @@
       });
     });
   }
-  // 攻撃タイミング：中央に近いほど 2 倍に近づく
-  function timingMeter() {
-    return new Promise((res) => {
-      modal(`<h2 style="margin:0;font-size:16px;text-align:center">タイミングを合わせて！</h2>
-        <div class="meter"><div class="sweet"></div><div class="mid"></div><div class="mk" id="mk"></div></div>
-        <button class="pri" id="tapBtn" style="width:100%;font-size:20px">いまだ！</button>`);
-      const t0 = performance.now(); let pos = 0, raf;
-      const frame = (now) => {
-        const p = ((now - t0) / 650) % 2; pos = p < 1 ? p : 2 - p;
-        $('mk').style.left = pos * 100 + '%';
-        raf = requestAnimationFrame(frame);
-      };
-      raf = requestAnimationFrame(frame);
-      $('tapBtn').onclick = () => { cancelAnimationFrame(raf); closeModal(); res(1 + (1 - Math.abs(pos - 0.5) * 2)); };
-    });
-  }
-
-  // ---------- 対戦 ----------
-  let me, foe, logLines, turnCount = 0;
-  function say(t) { logLines.push(t); if (logLines.length > 5) logLines.shift(); $('log').innerHTML = logLines.map((l) => `<div>${l}</div>`).join(''); }
-  const cardOf = (side) => (side === 'me' ? $('meCard') : $('foeCard'));
-  function fighterHtml(f, side) {
-    const A = BB.ATTRS[f.attr], pct = Math.max(0, f.hp / f.maxHp * 100);
-    const col = pct > 50 ? 'var(--hp)' : pct > 20 ? 'var(--hp2)' : 'var(--hp3)';
-    const body = f.bodyAttr !== f.attr ? `（体:${BB.ATTRS[f.bodyAttr].name}）` : '';
-    const atk = f.atkAttr !== f.attr ? `（攻:${BB.ATTRS[f.atkAttr].name}）` : '';
-    const st = Object.keys(f.status).filter((k) => f.status[k] > 0).map((k) => STATUS_JA[k]).join('・');
-    const it = f.item ? (f.item.effect.kind === 'consumable' && !f.consumable ? '' : `／🎁${f.item.name}`) : '';
-    return `<div class="frow"><div class="stk"></div><div class="finfo">
-      <div class="top"><span style="color:var(--${side})">${side === 'me' ? 'あなた' : 'てき'} ${f.name}</span><span>Lv${f.level}</span></div>
-      <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
-      <div class="small">HP ${f.hp}/${f.maxHp}${st ? ' ／ 💫' + st : ''}</div>
-      <div class="small">${A.emoji}${A.name}${atk}${body} ／ 🌿${f.herbs} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${it}</div></div></div>`;
-  }
-  function render() {
-    for (const [f, side] of [[foe, 'foe'], [me, 'me']]) {
-      const card = cardOf(side);
-      card.innerHTML = fighterHtml(f, side);
-      card.querySelector('.stk').appendChild(f.canvas);
+  // ---------- パーティ編成（最大6体。同じキャラ1体まで、同じアイテムは1体まで） ----------
+  const PARTY_MAX = 6, PICK = 3, PICK_SECONDS = 60;
+  const partyCodes = () => player.party.members.filter((c) => dex[c]);
+  const heldBy = (id) => partyCodes().find((c) => player.party.items[c] === id);
+  const itemLabel = (id) => (id ? BB.itemById(id).name : 'なし');
+  function cleanParty() {
+    const p = player.party;
+    p.members = p.members.filter((c) => dex[c]);
+    const seen = new Set();
+    p.members = p.members.filter((c) => { const k = dex[c].idx; if (seen.has(k)) return false; seen.add(k); return true; });
+    const used = new Set();
+    for (const c of Object.keys(p.items)) {
+      const id = p.items[c];
+      if (!p.members.includes(c) || !(player.bag[id] > 0) || used.has(id)) delete p.items[c]; else used.add(id);
     }
   }
-  async function flash(card, text, color) {
+  function memberRow(e, inParty, idxs) {
+    const row = document.createElement('div'); row.className = 'prow';
+    const th = document.createElement('div'); th.className = 'pth'; row.appendChild(th);
+    makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
+    const A = BB.ATTRS[e.attr];
+    const info = document.createElement('div'); info.className = 'pinfo';
+    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>`;
+    row.appendChild(info);
+    const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
+    const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
+    if (inParty) {
+      mk('🎁 アイテム', () => pickPartyItem(e.code));
+      mk('外す', async () => { player.party.members = player.party.members.filter((c) => c !== e.code); delete player.party.items[e.code]; await savePlayer(); renderParty(); });
+    } else {
+      const dup = idxs.has(e.idx), full = partyCodes().length >= PARTY_MAX;
+      mk(dup ? '同じキャラがいる' : full ? '満員' : '追加', async () => { player.party.members.push(e.code); await savePlayer(); renderParty(); }, dup || full);
+    }
+    return row;
+  }
+  function renderParty() {
+    cleanParty();
+    const box = $('partyBox'); box.innerHTML = '';
+    const codes = partyCodes(), idxs = new Set(codes.map((c) => dex[c].idx));
+    box.insertAdjacentHTML('beforeend', `<h2 class="small">パーティ（${codes.length}/${PARTY_MAX}）${codes.length < PICK ? ' ／ 対戦には3体以上必要です' : codes.length < PARTY_MAX ? ' ／ 6体そろうと公式の形です' : ''}</h2>`);
+    if (!codes.length) box.insertAdjacentHTML('beforeend', '<p class="small">まだ誰もいません。下の図鑑から追加してください</p>');
+    codes.forEach((c) => box.appendChild(memberRow(dex[c], true, idxs)));
+    box.insertAdjacentHTML('beforeend', '<h2 class="small" style="margin-top:14px">図鑑から追加</h2>');
+    const rest = Object.values(dex).filter((e) => !codes.includes(e.code)).sort((a, b) => b.level - a.level || b.xp - a.xp);
+    if (!rest.length) box.insertAdjacentHTML('beforeend', '<p class="small">図鑑に、ほかの戦士がいません。バーコードを読み取って戦士を増やしましょう</p>');
+    rest.forEach((e) => box.appendChild(memberRow(e, false, idxs)));
+  }
+  async function pickPartyItem(code) {
+    const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0 && (!heldBy(id) || heldBy(id) === code));
+    const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name}${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<br><span class="small">${d.text}</span>`, value: id }; }));
+    opts.push({ label: '← 戻る', value: 0 });
+    const id = await choose(`${dex[code].name} に持たせるアイテム`, opts);
+    if (!id) return;
+    if (id === '-') delete player.party.items[code]; else player.party.items[code] = id;
+    await savePlayer(); renderParty();
+  }
+  function openParty() { renderParty(); show('party'); }
+  $('btnParty').onclick = openParty;
+  $('btnPartyBack').onclick = () => show('home');
+
+  // ---------- 見せ合い・選出（制限時間つき） ----------
+  let myParty = [], foeParty = [], picked = [], pickTimer = null;
+  function memberFighter(code) {
+    const id = player.party.items[code];
+    return BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
+  }
+  function pcard(f, onClick) {
+    const A = BB.ATTRS[f.attr];
+    const el = document.createElement('div'); el.className = 'pcard';
+    const th = document.createElement('div'); th.className = 'pth'; th.appendChild(f.canvas); el.appendChild(th);
+    el.insertAdjacentHTML('beforeend', `<div>${A.emoji} ${f.name}</div><div class="small">Lv${f.level}${f.item ? ' ／ 🎁' : ''}</div>`);
+    if (onClick) el.onclick = onClick;
+    return el;
+  }
+  function renderPick() {
+    $('pvFoe').innerHTML = ''; $('pvMine').innerHTML = '';
+    foeParty.forEach((f) => $('pvFoe').appendChild(pcard(f)));
+    myParty.forEach((f, i) => {
+      const el = pcard(f, () => {
+        const at = picked.indexOf(i);
+        if (at >= 0) picked.splice(at, 1); else if (picked.length < PICK) picked.push(i);
+        renderPick();
+      });
+      const at = picked.indexOf(i);
+      if (at >= 0) { el.classList.add('sel'); el.insertAdjacentHTML('afterbegin', `<span class="pk">${at + 1}</span>`); }
+      $('pvMine').appendChild(el);
+    });
+    $('btnPick').disabled = picked.length !== PICK;
+  }
+  async function startSingle() {
+    const codes = partyCodes();
+    if (codes.length < PICK) {
+      const v = await choose('パーティが足りません', [
+        { label: `対戦には${PICK}体以上必要です（いま${codes.length}体）`, value: 0, disabled: true },
+        { label: '👥 パーティ編成へ', value: 1 }, { label: '← 戻る', value: 0 }]);
+      if (v) openParty();
+      return;
+    }
+    myParty = codes.map(memberFighter);
+    const avg = Math.round(myParty.reduce((a, f) => a + f.level, 0) / myParty.length);
+    foeParty = Battle.generateCpuParty(avg, rng, PARTY_MAX);
+    await Promise.all([...myParty, ...foeParty].map(async (f) => { f.canvas = await makeSticker(f, 160); }));
+    picked = [];
+    renderPick(); show('preview');
+    let left = PICK_SECONDS;
+    $('pickTimer').textContent = left;
+    clearInterval(pickTimer);
+    pickTimer = setInterval(() => {
+      left--; $('pickTimer').textContent = Math.max(0, left);
+      if (left <= 0) { // 時間切れ：レベルの高い順に自動で選ぶ
+        const rest = myParty.map((f, i) => i).filter((i) => !picked.includes(i)).sort((a, b) => myParty[b].level - myParty[a].level);
+        while (picked.length < PICK) picked.push(rest.shift());
+        confirmPick();
+      }
+    }, 1000);
+  }
+  function confirmPick() {
+    clearInterval(pickTimer);
+    const foeSel = Battle.cpuSelect(foeParty, myParty, PICK);
+    runBattle(picked.map((i) => myParty[i]), foeSel.map((i) => foeParty[i]));
+  }
+  $('btnPick').onclick = confirmPick;
+  $('btnBattle').onclick = startSingle;
+
+  // ---------- 対戦（同時入力ターン制） ----------
+  let st = null, view = null, logLines = [];
+  function say(t) { logLines.push(t); if (logLines.length > 6) logLines.shift(); $('log').innerHTML = logLines.map((l) => `<div>${l}</div>`).join(''); }
+  const cardOfSide = (s) => (s === 0 ? $('meCard') : $('foeCard'));
+  const sideName = (s) => (s === 0 ? 'あなた' : 'てき');
+  function cardHtml(s) {
+    const side = st.sides[s], idx = view.active[s], f = side.party[idx], hp = view.hp[s][idx];
+    const A = BB.ATTRS[f.attr], pct = Math.max(0, hp / f.maxHp * 100);
+    const col = pct > 50 ? 'var(--hp)' : pct > 20 ? 'var(--hp2)' : 'var(--hp3)';
+    const stt = Object.keys(f.status).filter((k) => f.status[k] > 0).map((k) => STATUS_JA[k]).join('・');
+    const atk = f.atkAttr !== f.attr ? `（攻:${BB.ATTRS[f.atkAttr].name}）` : '', body = f.bodyAttr !== f.attr ? `（体:${BB.ATTRS[f.bodyAttr].name}）` : '';
+    const chips = side.party.map((m, i) => `<span class="chip ${i === idx ? 'on' : ''} ${view.hp[s][i] <= 0 ? 'dead' : ''}">${m.name}</span>`).join('');
+    return `<div class="frow"><div class="stk"></div><div class="finfo">
+      <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)} ${f.name}</span><span>Lv${f.level}</span></div>
+      <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
+      <div class="small">HP ${hp}/${f.maxHp}${stt ? ' ／ 💫' + stt : ''}</div>
+      <div class="small">${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}</div>
+      <div class="chips">${chips}</div></div></div>`;
+  }
+  function renderBattle() {
+    for (const s of [0, 1]) {
+      const card = cardOfSide(s);
+      card.innerHTML = cardHtml(s);
+      card.querySelector('.stk').appendChild(st.sides[s].party[view.active[s]].canvas);
+    }
+  }
+  async function flashSide(s, text, color) {
+    const card = cardOfSide(s);
     card.classList.add('hit');
     const p = document.createElement('div'); p.className = 'pop'; p.style.color = color || '#fff'; p.textContent = text; card.appendChild(p);
-    await sleep(700); card.classList.remove('hit'); p.remove();
+    await sleep(650); card.classList.remove('hit'); p.remove();
   }
-
-  // 敵のレベルは 1〜(自分のLv+2)（最低でも3まで）からランダム。敵のキラキラの限界は超えない
-  function newFoe(myLv) {
-    const ch = BB.decode(BB.randomCode('char'));
-    const it = rng() < 0.5 ? BB.decode(BB.randomCode('item')) : null;
-    return BB.makeFighter(ch, it, Math.min(ch.limit, 1 + Math.floor(rng() * Math.max(3, myLv + 2))));
-  }
-
-  async function startBattle(chDec, itDec, bagId) {
-    last = { chDec, itDec, bagId };
-    const myLv = levelOf(chDec.code);
-    me = BB.makeFighter(chDec, itDec, myLv); foe = newFoe(myLv);
-    [me.canvas, foe.canvas] = await Promise.all([makeSticker(me, 256), makeSticker(foe, 256)]);
-    logLines = []; turnCount = 0;
-    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
-    show('battle'); render();
-    say(`${foe.name} が現れた！`);
-    let turn = BB.initiative(me, rng) >= BB.initiative(foe, rng) ? 'me' : 'foe';
-    say(turn === 'me' ? 'あなたの先攻！' : 'てきの先攻！');
-    await sleep(900);
-    while (me.hp > 0 && foe.hp > 0) {
-      turnCount++;
-      if (turn === 'me') await playerTurn(); else await foeTurn();
-      render();
-      turn = turn === 'me' ? 'foe' : 'me';
-      await sleep(300);
+  const effText = (m) => (m >= 1.5 ? '効果は抜群！' : m <= 0.5 ? '効果はいまひとつ…' : m < 1 ? 'あまり効かない…' : '');
+  async function playEvents(events) {
+    for (const e of events) {
+      switch (e.t) {
+        case 'switch':
+          say(`${sideName(e.s)}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
+          view.active[e.s] = e.idx; renderBattle(); await sleep(700); break;
+        case 'use': say(`${e.who} の ${e.skill}！`); await sleep(450); break;
+        case 'miss': say('しかし攻撃は外れた！'); await sleep(500); break;
+        case 'msg': say(e.text); await sleep(600); break;
+        case 'dmg':
+          view.hp[e.s][e.idx] = e.hp;
+          if (effText(e.mult)) say(effText(e.mult));
+          say(e.crit ? `会心の一撃！ ${e.dmg} のダメージ！` : `${e.dmg} のダメージ！`);
+          renderBattle(); await flashSide(e.s, '-' + e.dmg, e.crit ? '#ffd700' : '#ff7b72'); break;
+        case 'heal':
+          view.hp[e.s][e.idx] = e.hp; if (e.herbs !== undefined) view.herbs[e.s] = e.herbs;
+          say(e.item ? `${e.item} を使った！${e.amount ? ` ${e.amount} 回復！` : ''}` : `${e.amount} 回復！`);
+          renderBattle(); await flashSide(e.s, '+' + e.amount, '#3fb950'); break;
+        case 'status': say(`${e.name} は${STATUS_JA[e.status]}になった！`); renderBattle(); await sleep(600); break;
+        case 'poison':
+          view.hp[e.s][e.idx] = e.hp; say(`${e.name} は毒で ${e.dmg} のダメージ！`);
+          renderBattle(); await flashSide(e.s, '-' + e.dmg, '#a371f7'); break;
+        case 'faint': say(`${e.name} は たおれた！`); renderBattle(); await sleep(800); break;
+      }
     }
-    await sleep(700);
-    const win = me.hp > 0;
-    $('resEmo').textContent = win ? '🏆' : '💀';
-    $('resTitle').textContent = win ? 'しょうり！' : 'はいぼく…';
-    $('resSub').textContent = win ? `${foe.name} を倒した` : `${foe.name} に倒された`;
-    // 報酬：経験値・お金・まれにアイテム
-    const e = dex[chDec.code], oldLv = e.level, oldXp = e.xp;
-    e.xp = Math.min(e.xp + (win ? 30 + 5 * foe.level : 10), BB.xpForLevel(e.maxLv));
-    const gain = e.xp - oldXp;
-    e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
-    await Store.saveFighter(cur, e);
-    const gold = BB.rewardMoney(win, foe.level, rng);
+  }
+
+  // 自分の行動を決める（スキル／交代）
+  async function pickBench(title, canCancel) {
+    const side = st.sides[0];
+    const opts = Battle.benchAlive(side).map((i) => {
+      const f = side.party[i];
+      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　HP ${view.hp[0][i]}/${f.maxHp}`, value: i };
+    });
+    if (canCancel) opts.push({ label: '← 戻る', value: -1 });
+    const v = await choose(title, opts);
+    return v >= 0 ? v : null;
+  }
+  async function chooseAction() {
+    for (;;) {
+      const f = Battle.actOf(st, 0);
+      const top = await choose(`${f.name} はどうする？`, [
+        { label: '⚔ スキル', value: 'skill' },
+        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[0]).length }]);
+      if (top === 'skill') {
+        const opts = Battle.availableSkills(st, 0).map((s) => ({
+          label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
+          value: s.id, disabled: !!s.off,
+        }));
+        opts.push({ label: '← 戻る', value: 0 });
+        const id = await choose('スキル', opts);
+        if (id) return { type: 'skill', skill: id };
+      } else if (top === 'switch') {
+        const to = await pickBench('だれと交代する？', true);
+        if (to !== null) return { type: 'switch', to };
+      }
+    }
+  }
+
+  async function runBattle(mineList, foeList) {
+    st = Battle.createBattle(Battle.createSide('あなた', mineList), Battle.createSide('てき', foeList));
+    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3] };
+    logLines = [];
+    $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）　交代 → 優先度の高いスキル → DXの高い順';
+    show('battle'); renderBattle();
+    say(`${foeList[0].name} が勝負をしかけてきた！`); await sleep(700);
+    while (!st.over) {
+      const mine = await chooseAction();            // 同時入力：相手の行動は見えない
+      const foeAct = Battle.cpuAction(st, 1, rng);
+      await playEvents(Battle.resolveTurn(st, [mine, foeAct], rng));
+      for (const s of Battle.needReplace(st)) {      // たおれたあとは、次に出すキャラを選ぶ
+        let to = null;
+        if (s === 0) { while (to === null) to = await pickBench('次に出すキャラを選んでください', false); } else to = Battle.cpuReplace(st, 1);
+        await playEvents([Battle.replaceActive(st, s, to)]);
+      }
+      await sleep(250);
+    }
+    await sleep(500);
+    await finishBattle();
+  }
+
+  // 結果：参加した3体に経験値、お金、まれにアイテム
+  async function finishBattle() {
+    const win = st.winner === 0, draw = st.winner === -1;
+    $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
+    $('resTitle').textContent = win ? 'しょうり！' : draw ? 'ひきわけ' : 'はいぼく…';
+    const foeList = st.sides[1].party, mineList = st.sides[0].party;
+    const avgFoe = Math.round(foeList.reduce((a, f) => a + f.level, 0) / foeList.length);
+    $('resSub').textContent = win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた';
+    const members = [];
+    for (const f of mineList) {
+      const e = dex[f.code], oldLv = e.level, oldXp = e.xp;
+      e.xp = Math.min(e.xp + (win ? 30 + 5 * avgFoe : 10), BB.xpForLevel(e.maxLv));
+      const gain = e.xp - oldXp;
+      e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
+      await Store.saveFighter(cur, e);
+      members.push({ name: f.name, oldLv, e, gain });
+    }
+    const gold = BB.rewardMoney(win, avgFoe, rng);
     player.money += gold;
+    for (const id of st.sides[0].usedItems) { // 使い切りのアイテムは、持ち物からへる
+      player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
+      for (const c of Object.keys(player.party.items)) if (player.party.items[c] === id) delete player.party.items[c];
+    }
     const dropId = BB.rollDrop(win, rng);
     if (dropId) player.bag[dropId] = (player.bag[dropId] || 0) + 1;
     await savePlayer();
     show('result');
-    renderRewards({ gain, oldLv, e, gold, drop: dropId ? BB.itemById(dropId) : null });
+    renderRewards({ members, gold, drop: dropId ? BB.itemById(dropId) : null });
   }
 
   // 報酬画面：経験値 → お金 → アイテム の順に、ひとつずつ現れる
@@ -435,14 +608,16 @@
       el.className = 'reward ' + cls; el.style.setProperty('--d', delay + 's'); delay += 0.5;
       el.innerHTML = html; box.appendChild(el); return el;
     };
-    const e = r.e, capped = e.level >= e.maxLv;
-    const base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
-    const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
-    const note = !capped ? `次のレベルまで あと ${need - (e.xp - base)}`
-      : (e.maxLv < e.limit ? `限界です。同じシールの別ロットのバーコードで限界Lv+${BB.LOT_STEP}（キラキラの上限 Lv${e.limit}）` : `キラキラの最大 Lv${e.limit} です`);
-    add(`<div class="ic">⭐</div><div class="rb"><div class="rt">経験値 <b>+${r.gain}</b></div>
-      <div class="small">Lv${e.level}　${note}</div><div class="xpbar"><div style="width:${pct}%"></div></div>
-      ${e.level > r.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${r.oldLv} → Lv${e.level}</div>` : ''}</div>`);
+    const rows = r.members.map((m) => {
+      const e = m.e, capped = e.level >= e.maxLv;
+      const base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
+      const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
+      const note = !capped ? `あと ${need - (e.xp - base)}`
+        : (e.maxLv < e.limit ? `限界です（別ロットで限界Lv+${BB.LOT_STEP}。上限 Lv${e.limit}）` : `最大 Lv${e.limit}`);
+      return `<div style="margin-bottom:8px"><div class="rt">${m.name} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
+        <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
+    }).join('');
+    add(`<div class="ic">⭐</div><div class="rb"><div class="rt" style="margin-bottom:6px">経験値</div>${rows}</div>`);
     add(`<div class="ic">💰</div><div class="rb"><div class="rt">お金 <b>+${r.gold.toLocaleString()}</b></div><div class="small">所持金 ${player.money.toLocaleString()}</div></div>`);
     if (r.drop) {
       const el = add(`<div class="rimg"></div><div class="rb"><div class="rt">🎁 アイテムを手に入れた！</div><div class="rn">${r.drop.name}</div>
@@ -453,134 +628,21 @@
     }
   }
 
-  const effText = (m) => (m >= 1.5 ? '効果は抜群！' : m <= 0.5 ? '効果はいまひとつ…' : m < 1 ? 'あまり効かない…' : '');
-
-  // 通常攻撃
-  async function doAttack(att, def, side, timing) {
-    if (!BB.rollHit(att, def, rng)) { say('しかし攻撃は外れた！'); await sleep(600); return; }
-    const r = BB.calcDamage(att, def, timing, rng);
-    r.dmg = Math.max(1, Math.round(r.dmg * BB.fatigue(Math.ceil(turnCount / 2))));
-    def.hp = Math.max(0, def.hp - r.dmg);
-    if (effText(r.mult)) say(effText(r.mult));
-    say(r.crit ? `会心の一撃！ ${r.dmg} のダメージ！` : `${r.dmg} のダメージ！`);
-    await flash(cardOf(side === 'me' ? 'foe' : 'me'), '-' + r.dmg, r.crit ? '#ffd700' : '#ff7b72');
-    for (const k of BB.tryInflict(att, def, rng)) say(`${def.name} は${STATUS_JA[k]}になった！`);
-  }
-  // 特殊技（特殊能力値で攻撃。防御無視・必中。3ターンに1回）
-  async function doSpecial(att, def, side, timing) {
-    att.spCd = BB.SP_COOLDOWN;
-    say(`${att.name} の特殊技！`);
-    const r = BB.specialDamage(att, def, timing);
-    r.dmg = Math.max(1, Math.round(r.dmg * BB.fatigue(Math.ceil(turnCount / 2))));
-    def.hp = Math.max(0, def.hp - r.dmg);
-    if (effText(r.mult)) say(effText(r.mult));
-    say(`${r.dmg} のダメージ！`);
-    await flash(cardOf(side === 'me' ? 'foe' : 'me'), '-' + r.dmg, '#a371f7');
-  }
-  async function herb(f, n, side) {
-    f.herbs -= n;
-    const v = BB.healAmount(f, n);
-    f.hp += v;
-    say(`薬草を${n}個使って ${v} 回復！`);
-    await flash(cardOf(side), '+' + v, '#3fb950');
-  }
-  async function powerKey(f, side, timing) {
-    f.herbs -= 1;
-    const { amount } = BB.powerHeal(f, timing, rng);
-    f.hp += amount;
-    say(`パワーキー！ ${amount} 回復！`);
-    await flash(cardOf(side), '+' + amount, '#3fb950');
-  }
-  async function useItem(f, side) {
-    const name = f.item.name;
-    const healed = BB.useConsumable(f);
-    say(`${name} を使った！${healed ? ` ${healed} 回復！` : ''}`);
-    await flash(cardOf(side), healed ? '+' + healed : name, '#3fb950');
-  }
-
-  // ターンの始め。毒のダメージ・麻痺の判定。true なら行動できない（または倒れた）
-  async function beginTurn(f, side) {
-    const t = BB.startTurn(f);
-    if (t.poison) { say(`${f.name} は毒で ${t.poison} のダメージ！`); await flash(cardOf(side), '-' + t.poison, '#a371f7'); }
-    if (f.hp <= 0) return true;
-    if (t.skip) { say(`${f.name} は麻痺して動けない！`); await sleep(700); return true; }
-    return false;
-  }
-
-  async function playerTurn() {
-    if (await beginTurn(me, 'me')) return;
-    render();
-    for (;;) {
-      const hurt = me.hp >= me.maxHp;
-      const acts = [{ label: '⚔ たたかう', value: 'atk' },
-        { label: `✨ 特殊技（${me.spCd > 0 ? 'あと' + me.spCd + 'ターン' : '防御無視・必中'}）`, value: 'sp', disabled: me.spCd > 0 }];
-      if (me.herbs > 0) {
-        acts.push({ label: `🌿 薬草 (残り${me.herbs})`, value: 'herb', disabled: hurt });
-        acts.push({ label: '🔑 パワーキー (薬草-1)', value: 'power', disabled: hurt });
-      }
-      if (me.consumable) acts.push({ label: `🎁 ${me.item.name}を使う`, value: 'item' });
-      const a = await choose('どうする？', acts);
-      if (a === 'atk') { await doAttack(me, foe, 'me', await timingMeter()); return; }
-      if (a === 'sp') { await doSpecial(me, foe, 'me', await timingMeter()); return; }
-      if (a === 'power') { const t = await timingMeter(); await powerKey(me, 'me', 1 + (t - 1) * 0.4); return; }
-      if (a === 'item') { await useItem(me, 'me'); return; }
-      if (a === 'herb') {
-        const opts = [];
-        for (let n = 1; n <= me.herbs; n++) opts.push({ label: `${n}個使う（約${n * 20}%回復）`, value: n });
-        opts.push({ label: '← 戻る', value: 0 });
-        const n = await choose('薬草', opts);
-        if (n) { await herb(me, n, 'me'); return; }
-      }
-    }
-  }
-
-  async function foeTurn() {
-    say(`${foe.name} のターン`);
-    await sleep(500);
-    if (await beginTurn(foe, 'foe')) return;
-    if (foe.consumable && foe.hp < foe.maxHp * 0.5 && rng() < 0.7) { await useItem(foe, 'foe'); return; }
-    if (foe.hp < foe.maxHp * 0.35 && foe.herbs > 0 && rng() < 0.6) {
-      if (rng() < 0.5) await powerKey(foe, 'foe', 1 + rng() * 0.4);
-      else await herb(foe, Math.min(foe.herbs, 1 + Math.floor(rng() * 2)), 'foe');
-      return;
-    }
-    if (foe.spCd === 0 && rng() < 0.6) { await doSpecial(foe, me, 'foe', 1 + rng() * 0.8); return; }
-    await doAttack(foe, me, 'foe', 1 + rng() * 0.8);
-  }
-
   // ---------- ボタン ----------
-  // 持ち物のアイテムで対戦するときは、1個へらす（0個なら使わずに対戦）
-  async function spendBag(id) {
-    if (!id || !(player.bag[id] > 0)) return false;
-    player.bag[id]--; if (player.bag[id] <= 0) delete player.bag[id];
-    await savePlayer();
-    return true;
-  }
-  $('btnStart').onclick = async () => {
-    $('btnStart').disabled = true;
-    await commitChar();
-    const bagId = slots.item.bagId;
-    const used = await spendBag(bagId);
-    if (bagId && !used) setSlot('item', '');
-    startBattle(slots.char.dec, used ? slots.item.dec : (bagId ? null : slots.item.dec), used ? bagId : null);
-  };
-  $('btnAgain').onclick = async () => {
-    const used = await spendBag(last.bagId);
-    startBattle(last.chDec, last.bagId ? (used ? last.itDec : null) : last.itDec, used ? last.bagId : null);
-  };
-  $('btnHome').onclick = () => { setSlot('char', slots.char.code); show('home'); };
+  $('btnAgain').onclick = startSingle;
+  $('btnHome').onclick = () => { renderWallet(); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
-    <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）の先頭9桁から、戦士の「シール」が決まります（③④は使いません）。先頭が45・49の商品が戦士（45と49は同じ扱い）、9784の書籍がアイテムです。それ以外は使えません。<br>
-    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。<br>
-    ・シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。<br>
-    ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
+    <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
+    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
     ・限界レベルは最初Lv5。同じシールの別ロットのバーコードで+5ずつ、キラキラの限界まで上がります。<br>
-    ・攻撃は<b>タイミングメーター</b>を中央で止めるほどダメージ最大2倍。特殊技は防御無視・必中で3ターンに1回。<br>
-    ・薬草は3個。「薬草」は確実に回復、「パワーキー」は薬草1個で運とタイミング次第の大回復。<br>
-    ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけ（2回目からは今日のコードを入れ直すだけ）。<br>
-    ・戦いのあとに、経験値・お金・まれにアイテム（12%。負けても3%）がもらえます。アイテムは「🎒 持ち物」から使えます（使うと1個へります）。<br>
-    ・書籍のアイテムは武器・防具・アクセサリー（能力アップなど）か、使い切りの回復薬。<br>
-    ・先にHPが0になった方の負けです。</p>
+    ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
+    ・対戦は「⚔ シングルバトル」：相手のパーティと見せ合い、制限時間内に戦う3体を選びます。<br>
+    ・毎ターン、自分と相手が<b>同時に</b>スキルか交代を決め、一斉に処理されます。順番は <b>交代 → 優先度の高いスキル → DXの高い順</b> です。<br>
+    ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
+    ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
+    ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
+    ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
+    ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 
   loadProfiles();

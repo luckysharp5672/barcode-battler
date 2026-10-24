@@ -48,7 +48,8 @@ button:disabled{opacity:.35}
 .meter .mid{position:absolute;left:49%;width:2%;top:0;bottom:0;background:var(--hp)}
 .meter .mk{position:absolute;top:0;bottom:0;width:6px;margin-left:-3px;background:var(--acc)}
 video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover}
-.lib button{text-align:left;margin-bottom:6px}
+.lib{display:flex;flex-direction:column;gap:6px}
+.lib button{text-align:left;width:100%;flex:none;margin:0}
 .big{font-size:56px;text-align:center;margin:8px 0}
 .small{font-size:12px;color:var(--dim)}
 .stkwrap{width:min(100%,260px);aspect-ratio:1;margin:4px auto 8px;border-radius:14px;overflow:hidden;background:#0d1117}
@@ -69,6 +70,21 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 .xpbar{height:8px;background:#0d1117;border-radius:4px;overflow:hidden;border:1px solid var(--line);margin-top:6px}
 .xpbar>div{height:100%;background:linear-gradient(90deg,#58a6ff,#a371f7)}
 .lvup{color:#3fb950;font-weight:700;margin-top:6px}
+
+.prow{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.pth{width:72px;height:72px;flex:none;border-radius:8px;overflow:hidden;background:#0d1117}
+.pinfo{flex:1;min-width:0;font-size:14px}
+.pbtns{display:flex;flex-direction:column;gap:6px}
+.pbtns button{min-height:36px;padding:6px 10px;font-size:13px;flex:none}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.pcard{position:relative;background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:6px;text-align:center;font-size:12px}
+.pcard .pth{width:100%;height:auto;aspect-ratio:1;margin-bottom:4px}
+.pcard.sel{border-color:var(--acc);box-shadow:0 0 10px #f0b42988}
+.pcard .pk{position:absolute;top:2px;left:2px;background:var(--acc);color:#1a1300;border-radius:99px;width:22px;height:22px;font-weight:800;line-height:22px}
+.chips{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.chip{font-size:11px;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.chip.on{border-color:var(--acc);color:var(--fg)}
+.chip.dead{opacity:.35;text-decoration:line-through}
 </style>
 </head>
 <body>
@@ -85,7 +101,7 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   <div class="small" id="wallet" style="margin:-2px 0 10px"></div>
 
   <div class="card" id="slotChar">
-    <h2>① 戦士のバーコード（必須）</h2>
+    <h2>① 戦士を手に入れる（スキャン・ランダム・数字入力）</h2>
     <input type="text" id="inChar" inputmode="numeric" placeholder="45/49で始まる商品のJAN" maxlength="13">
     <div class="row">
       <button data-scan="char">📷 スキャン</button>
@@ -98,13 +114,12 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   </div>
 
   <div class="card" id="slotItem">
-    <h2>② アイテムのバーコード（任意）</h2>
+    <h2>② アイテムを手に入れる（書籍のバーコード）</h2>
     <input type="text" id="inItem" inputmode="numeric" placeholder="9784で始まる書籍のJAN" maxlength="13">
     <div class="row">
       <button data-scan="item">📷 スキャン</button>
       <button data-rand="item">🎲 ランダム</button>
       <button data-bag="item">🎒 持ち物</button>
-      <button data-clear="item">✕</button>
     </div>
     <div class="warn" id="wItem"></div>
     <div class="info" id="iItem"></div>
@@ -112,9 +127,29 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   </div>
 
   <div class="row">
-    <button class="pri" id="btnStart" disabled>⚔ 対戦開始</button>
+    <button id="btnParty">👥 パーティ編成</button>
+    <button class="pri" id="btnBattle">⚔ シングルバトル</button>
   </div>
   <div class="row"><button id="btnHelp">📖 あそびかた</button></div>
+</section>
+
+<!-- パーティ編成 -->
+<section id="party" class="screen">
+  <h1>👥 パーティ編成</h1>
+  <p class="sub">最大6体。同じキャラは1体まで、同じアイテムも1体にしか持たせられません。</p>
+  <div id="partyBox"></div>
+  <div class="row"><button class="pri" id="btnPartyBack">← ホームへ</button></div>
+</section>
+
+<!-- 見せ合い・選出 -->
+<section id="preview" class="screen">
+  <h1>🔍 見せ合い・選出</h1>
+  <p class="sub">相手のパーティを見て、戦わせる3体を、順番に選びます（最初の1体が先発）。のこり <b id="pickTimer">60</b> 秒</p>
+  <h2 class="small">あいて</h2>
+  <div class="pgrid" id="pvFoe"></div>
+  <h2 class="small">あなた（タップで選ぶ）</h2>
+  <div class="pgrid" id="pvMine"></div>
+  <div class="row"><button class="pri" id="btnPick" disabled>この3体で決定</button></div>
 </section>
 
 <!-- 対戦 -->
@@ -132,8 +167,8 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
   <h1 id="resTitle" style="text-align:center"></h1>
   <p class="sub" id="resSub" style="text-align:center"></p>
   <div id="rewards"></div>
-  <div class="row"><button class="pri" id="btnAgain">もう一度（同じ戦士）</button></div>
-  <div class="row"><button id="btnHome">戦士を選び直す</button></div>
+  <div class="row"><button class="pri" id="btnAgain">もう一度（同じパーティ）</button></div>
+  <div class="row"><button id="btnHome">ホームへ</button></div>
 </section>
 
 <!-- スキャンモーダル -->
@@ -156,6 +191,7 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 
 <script src="data.js"></script>
 <script src="engine.js"></script>
+<script src="battle.js"></script>
 <script src="store.js"></script>
 <script src="app.js"></script>
 </body>

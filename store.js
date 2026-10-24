@@ -20,11 +20,15 @@
       const d = read(); if (!d.profiles[pid]) return;
       d.profiles[pid].dex[entry.code] = entry; write(d);
     },
-    // お金と持ち物（バーコードなしで使えるアイテム）{ money, bag: { アイテムID: 個数 } }
-    async getPlayer(pid) { const p = read().profiles[pid]; return { money: (p && p.money) || 0, bag: (p && p.bag) || {} }; },
+    // お金・持ち物・手に入れた書籍のコード・パーティ
+    //   { money, bag: { アイテムID: 個数 }, itemCodes: [書籍のバーコード], party: { members: [戦士のコード], items: { 戦士のコード: アイテムID } } }
+    async getPlayer(pid) {
+      const p = read().profiles[pid] || {};
+      return { money: p.money || 0, bag: p.bag || {}, itemCodes: p.itemCodes || [], party: p.party || { members: [], items: {} } };
+    },
     async setPlayer(pid, pl) {
       const d = read(); if (!d.profiles[pid]) return;
-      d.profiles[pid].money = pl.money; d.profiles[pid].bag = pl.bag; write(d);
+      Object.assign(d.profiles[pid], { money: pl.money, bag: pl.bag, itemCodes: pl.itemCodes, party: pl.party }); write(d);
     },
     // 今日のランダム（戦士・アイテムそれぞれ1日1回）の記録 { char: {date, code}, item: {date, code} }
     async getDaily(pid) { const p = read().profiles[pid]; return p && p.daily ? p.daily : {}; },
