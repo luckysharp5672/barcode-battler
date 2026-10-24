@@ -9,7 +9,7 @@
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
   let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
   // お金・持ち物・手に入れた書籍のコード・パーティ・お店（今日の購入/修行・持ち込み・見た目）
-  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} }, shop: { date: '', bought: [] }, train: { date: '', xp: 0 }, carry: { herbs: 0, boost: false }, xp2: '', cosmetics: { titles: [], title: '', frames: [], frame: '' } };
+  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} }, shop: { date: '', bought: [] }, train: { date: '', xp: 0 }, carry: { herbs: 0, boost: false }, xp2: '', stageClear: 0, cosmetics: { titles: [], title: '', frames: [], frame: '' } };
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -438,10 +438,14 @@
     }
   }
   // パーティ編成の枠の中に出す、小さなステータスバー
-  function miniBars(e) {
-    const f = BB.makeFighter(BB.decode(e.code), null, e.level);
-    const sts = { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp };
-    return '<div class="mbars">' + STAT_NAMES.map(([k, n]) => `<div class="mb"><span>${n}</span><i><u style="width:${Math.min(100, sts[k] / 1.4)}%"></u></i><b>${Math.round(sts[k])}</b></div>`).join('') + '</div>';
+  function miniBars(e, itemId) {
+    const stsOf = (item) => { const f = BB.makeFighter(BB.decode(e.code), item, e.level); return { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp }; };
+    const base = stsOf(null), cur = itemId ? stsOf(BB.itemById(itemId)) : base;
+    return '<div class="mbars">' + STAT_NAMES.map(([k, n]) => {
+      const d = Math.round(cur[k] - base[k]);
+      const dt = d ? `<em class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : ''}${d}</em>` : '';
+      return `<div class="mb"><span>${n}</span><i><u style="width:${Math.min(100, cur[k] / 1.4)}%"></u>${d > 0 ? `<s style="left:${Math.min(100, base[k] / 1.4)}%;width:${Math.max(0, Math.min(100, cur[k] / 1.4) - Math.min(100, base[k] / 1.4))}%"></s>` : ''}</i><b>${Math.round(cur[k])}</b>${dt}</div>`;
+    }).join('') + '</div>';
   }
   function memberRow(e, inParty, idxs) {
     const row = document.createElement('div'); row.className = 'prow';
@@ -449,7 +453,7 @@
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
     const info = document.createElement('div'); info.className = 'pinfo';
-    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e)}`;
+    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
     row.appendChild(info);
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
@@ -687,9 +691,15 @@
   async function pickStage(games) {
     let last = 1;
     try { last = Math.min(10, Math.max(1, +localStorage.getItem(STAGE_KEY) || 1)); } catch (e) { /* 保存できなくても動く */ }
+    const open = Math.min(STAGES.length, (player.stageClear || 0) + 1);   // クリアした次のステージまで遊べる
+    last = Math.min(last, open);
     const v = await choose(`${games > 1 ? '🏆 3本勝負' : '⚔ シングル'}：ステージ（CPUの強さ）をえらぶ`, [
-      { label: 'CPUのパーティの平均レベルの目安です。数が大きいほど強く、もらえる経験値・お金も多くなります。', value: 0, disabled: true },
-      ...STAGES.map((s, i) => ({ label: `${s.flag} <b>${i + 1}. ${s.name}</b>　<span class="small">強さ Lv${s.lv}ごろ ${'★'.repeat(Math.ceil((i + 1) / 2))}${i + 1 === last ? '　（前回）' : ''}</span>`, value: i + 1 })),
+      { label: 'CPUのパーティの平均レベルの目安です。<b>勝つとクリア</b>で、次のステージが開きます（シングルでも3本勝負でも）。数が大きいほど強く、もらえる経験値・お金も多くなります。', value: 0, disabled: true },
+      ...STAGES.map((s, i) => {
+        const n = i + 1, done = n <= player.stageClear, locked = n > open;
+        return { label: locked ? `🔒 <b>${n}. ？？？</b>　<span class="small">${STAGES[i - 1].name}をクリアすると開きます</span>`
+          : `${s.flag} <b>${n}. ${s.name}</b>　<span class="small">強さ Lv${s.lv}ごろ ${'★'.repeat(Math.ceil(n / 2))}${done ? '　✅クリア' : '　🆕'}${n === last && n > 1 ? '　（前回）' : ''}</span>`, value: n, disabled: locked };
+      }),
       { label: '← 戻る', value: -1 }]);
     if (v <= 0) return 0;
     try { localStorage.setItem(STAGE_KEY, String(v)); } catch (e) { /* 保存できなくても動く */ }
@@ -1021,11 +1031,17 @@
       player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
       for (const c of Object.keys(player.party.items)) if (player.party.items[c] === id) delete player.party.items[c];
     }
+    // ステージクリア：CPUに勝つと、次のステージが開く
+    let unlock = null;
+    if (win && match.stage && !match.pvp) {
+      const no = STAGES.indexOf(match.stage) + 1;
+      if (no > (player.stageClear || 0)) { player.stageClear = no; unlock = { stage: match.stage, next: STAGES[no] || null }; }
+    }
     const dropId = BB.rollDrop(win, rng);
     if (dropId) player.bag[dropId] = (player.bag[dropId] || 0) + 1;
     await savePlayer();
     show('result');
-    renderRewards({ members, gold, boost: boost2, drop: dropId ? BB.itemById(dropId) : null });
+    renderRewards({ members, gold, unlock, boost: boost2, drop: dropId ? BB.itemById(dropId) : null });
     $('foeRevealTitle').style.display = 'block';
     renderFoeReveal($('foeReveal'));
     if (pvp) await pvpEnd('done');
@@ -1050,6 +1066,7 @@
         <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
     }).join('');
     add(`<div class="ic">⭐</div><div class="rb"><div class="rt" style="margin-bottom:6px">経験値${r.boost ? ' <span class="tag">ブースト×2</span>' : ''}</div>${rows}</div>`);
+    if (r.unlock) add(`<div class="ic">🎌</div><div class="rb"><div class="rt">ステージクリア！ ${r.unlock.stage.flag} ${r.unlock.stage.name}</div><div class="small">${r.unlock.next ? `次は ${r.unlock.next.flag} ${r.unlock.next.name} が遊べます` : '全ステージ制覇！おめでとう！'}</div></div>`);
     add(`<div class="ic">💰</div><div class="rb"><div class="rt">お金 <b>+${r.gold.toLocaleString()}</b></div><div class="small">所持金 ${player.money.toLocaleString()}</div></div>`);
     if (r.drop) {
       const el = add(`<div class="rimg"></div><div class="rb"><div class="rt">🎁 アイテムを手に入れた！</div><div class="rn">${r.drop.name}</div>
@@ -1533,7 +1550,7 @@
     ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
     ・限界レベルは、キラキラで最初から決まります（ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）。同じシールの別ロットのバーコードで、さらに+5ずつ（最大Lv60）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
-    ・CPUとの対戦は、はじめに<b>ステージ（国名・10段階）</b>をえらびます。後ろの国ほどCPUが強く、もらえる経験値とお金も多くなります。<br>
+    ・CPUとの対戦は、はじめに<b>ステージ（国名・10段階）</b>をえらびます。後ろの国ほどCPUが強く、もらえる経験値とお金も多くなります。<b>勝ってクリアすると、次の国が開きます</b>（最初は日本だけ）。<br>
     ・対戦は「⚔ シングル（1本）」か「🏆 3本勝負（同じ6体で最大3試合、先に2勝）」。相手のパーティと見せ合い、制限時間60秒で戦う3体と、先発・控えの順番を決めます。見えるのは相手の6体の姿と属性だけです。<br>
     ・選ぶときは、カードをタップするとステータス・スキル・アイテムの詳細が出ます。「🔎 相性ヒント」をオンにすると、相手のカードをタップして、自分の6体の有利・不利を確かめられます。<br>
     ・3本勝負では、前の試合で相手が出したキャラに「G」の印が付きます。試合のあとに、相手のパーティが公開されます。<br>
