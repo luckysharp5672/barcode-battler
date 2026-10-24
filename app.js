@@ -1019,7 +1019,7 @@
     for (const code of match.codes) {
       const e = dex[code]; if (!e) continue;
       const played = match.played.has(code), oldLv = e.level, oldXp = e.xp;
-      e.xp = Math.min(e.xp + Math.round(baseXp * (played ? 1 : RESERVE_XP)), BB.xpForLevel(e.maxLv));
+      e.xp = Math.max(e.xp, Math.min(e.xp + Math.round(baseXp * (played ? 1 : RESERVE_XP)), BB.xpForLevel(e.maxLv)));  // 経験値は減らない
       const gain = e.xp - oldXp;
       e.level = BB.levelFromXp(e.xp, e.maxLv); if (played) e[win ? 'wins' : 'losses']++;
       await Store.saveFighter(cur, e);
