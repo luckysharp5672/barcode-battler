@@ -91,10 +91,12 @@
     const s = slots.char, st = s.status;
     if (st.type === 'new') {
       const d = s.dec;
+      if (dex[d.code]) return;
       dex[d.code] = { code: d.code, idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit,
         xp: 0, level: 1, maxLv: BB.START_LIMIT, lots: [], wins: 0, losses: 0 };
       await Store.saveFighter(cur, dex[d.code]);
     } else if (st.type === 'lot') {
+      if (st.entry.lots.includes(s.code)) return;
       st.entry.lots.push(s.code);
       st.entry.maxLv = BB.maxLevelOf(st.entry.limit, st.entry.lots.length);
       await Store.saveFighter(cur, st.entry);
@@ -102,7 +104,7 @@
   }
   function statusText(st) {
     switch (st.type) {
-      case 'new': return `🆕 新しい戦士として図鑑に登録されます（限界Lv${BB.START_LIMIT}）`;
+      case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${BB.START_LIMIT}）`;
       case 'known': return '';
       case 'lot': return `🎁 同じシールの別ロット！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, st.entry.lots.length + 1)}（対戦開始で確定）`;
       case 'lotUsed': return `このバーコードは使用済みです。${st.entry.name} を呼び出しました`;
@@ -168,7 +170,21 @@
     if (preview) makeSticker(preview).then((c) => { const box = $('stk' + cap); if (box && s.dec === preview) box.appendChild(c); });
     $('btnStart').disabled = !slots.char.dec || (slots.item.code && !slots.item.dec);
   }
+  // 戦士を手に入れた（スキャン・ランダム・入力の確定）ときに、すぐ図鑑へ登録する／別ロットなら限界Lvを上げる
+  async function acquire(kind, code) {
+    setSlot(kind, code);
+    const s = slots[kind];
+    if (kind !== 'char' || !s.status || (s.status.type !== 'new' && s.status.type !== 'lot')) return;
+    const st = s.status, name = s.dec.name, oldMax = st.entry ? st.entry.maxLv : 0;
+    await commitChar();
+    const e = dex[s.dec.code] || st.entry;
+    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（限界Lv${BB.START_LIMIT}）`
+      : `🎁 同じシールの別ロット！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
+    setSlot('char', s.code);
+    $('iChar').textContent = msg;
+  }
   $('inChar').addEventListener('input', (e) => setSlot('char', e.target.value));
+  $('inChar').addEventListener('change', (e) => acquire('char', e.target.value));
   $('inItem').addEventListener('input', (e) => setSlot('item', e.target.value));
   // ランダムは、戦士・アイテムそれぞれ1日1回（端末の日付で切り替わる）。2回目以降は今日のコードを入れ直すだけ
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -180,14 +196,14 @@
     const cap = kind === 'char' ? 'Char' : 'Item';
     let note;
     if (usedToday(kind)) {
-      setSlot(kind, daily[kind].code);
+      await acquire(kind, daily[kind].code);
       note = '🎲 ランダムは1日1回です。今日のコードを入れ直しました（次は明日）';
     } else {
       const code = BB.randomCode(kind);
       daily[kind] = { date: today(), code };
       await Store.setDaily(cur, kind, daily[kind]);
       updateRandButtons();
-      setSlot(kind, code);
+      await acquire(kind, code);
       note = '🎲 今日のランダム（1日1回）';
     }
     const el = $('i' + cap);
@@ -252,7 +268,7 @@
     while (scanning) {
       try {
         const r = await det.detect(v);
-        if (r.length) { const raw = r[0].rawValue; closeScan(); setSlot(kind, raw); return; }
+        if (r.length) { const raw = r[0].rawValue; closeScan(); acquire(kind, raw); return; }
       } catch (e) { /* 読み取り失敗は無視して再試行 */ }
       await sleep(250);
     }
@@ -276,7 +292,7 @@
         try {
           const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(new ZXing.HTMLCanvasElementLuminanceSource(cv)));
           const raw = reader.decode(bmp).getText();
-          closeScan(); setSlot(kind, raw); return;
+          closeScan(); acquire(kind, raw); return;
         } catch (e) { /* このコマには見つからない。次のコマへ */ }
       }
       await sleep(150);
@@ -555,6 +571,7 @@
   $('btnHome').onclick = () => { setSlot('char', slots.char.code); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）の先頭9桁から、戦士の「シール」が決まります（③④は使いません）。先頭が45・49の商品が戦士（45と49は同じ扱い）、9784の書籍がアイテムです。それ以外は使えません。<br>
+    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。<br>
     ・シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・限界レベルは最初Lv5。同じシールの別ロットのバーコードで+5ずつ、キラキラの限界まで上がります。<br>
