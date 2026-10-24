@@ -410,6 +410,16 @@
       const extra = id === 'special' ? `（威力の目安 ${Math.round(f.sp * 2.2 + 5)}）` : (id === 'attack' || id === 'quick') ? `（STが基準。ST ${f.st}）` : '';
       return `<div class="dsk"><b>${sk.name}</b>${sk.pri ? ` <span class="tag">優先度${sk.pri > 0 ? '+' : ''}${sk.pri}</span>` : ''}<div class="small">${sk.desc}${extra}</div></div>`;
     }).join('');
+    // 経験値：次のレベルまでの進み具合（図鑑にいる戦士だけ。相手のCPUには出さない）
+    let xpRow = '';
+    const de = dex[f.code];
+    if (de) {
+      const capped = de.level >= de.maxLv;
+      const base = BB.xpForLevel(de.level), need = BB.xpForLevel(de.level + 1) - base;
+      const into = capped ? need : de.xp - base, pct = capped ? 100 : Math.round(into / need * 100);
+      const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（別ロットで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
+      xpRow = `<div class="dbar"><span class="dn">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
+    }
     const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b>：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
     const atk = f.atkAttr !== f.attr ? `／攻撃の属性は${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? `／体の属性は${BB.ATTRS[f.bodyAttr].name}` : '';
     let aff = '';
@@ -420,7 +430,7 @@
     return `<div class="dhead"><div class="dstk"></div><div><div class="nm">${A.emoji} ${f.name}</div>
       <div class="small">${f.role}　${f.type}</div><div class="small">${A.name}属性${atk}${body}　✨${f.kirakira.name}</div>
       <div class="small">Lv${f.level} / 限界Lv${dex[f.code] ? dex[f.code].maxLv : f.limit}</div></div></div>
-      ${bars}<div class="small">体力 ${f.maxHp}（HP × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
+      ${bars}${xpRow}<div class="small">体力 ${f.maxHp}（HP × ${BB.HP_SCALE}）</div>${item}${aff}<h3>スキル</h3>${skills}`;
   }
   function fillDetail(box, f, foeAttrs) {
     box.innerHTML = detailHtml(f, foeAttrs);
