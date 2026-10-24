@@ -165,7 +165,8 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 
   <div class="row" style="align-items:center">
     <select id="profSel" style="flex:2;min-height:44px;border-radius:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);padding:0 10px;font:inherit"></select>
-    <button id="btnNewProf">＋ 家族を追加</button>
+    <button id="btnNewProf">＋ ユーザー追加</button>
+    <button id="btnDelProf" style="flex:none;padding:11px 12px">🗑 削除</button>
   </div>
   <div class="small" id="wallet" style="margin:-2px 0 10px"></div>
 
@@ -208,7 +209,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2152</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2201</div>
 </section>
 
 <!-- お店 -->
@@ -312,11 +313,11 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=20261024-2152"></script>
-<script src="engine.js?v=20261024-2152"></script>
-<script src="battle.js?v=20261024-2152"></script>
-<script src="store.js?v=20261024-2152"></script>
-<script src="cloud.js?v=20261024-2152"></script>
-<script src="app.js?v=20261024-2152"></script>
+<script src="data.js?v=20261024-2201"></script>
+<script src="engine.js?v=20261024-2201"></script>
+<script src="battle.js?v=20261024-2201"></script>
+<script src="store.js?v=20261024-2201"></script>
+<script src="cloud.js?v=20261024-2201"></script>
+<script src="app.js?v=20261024-2201"></script>
 </body>
 </html>

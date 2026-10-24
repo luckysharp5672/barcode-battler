@@ -21,6 +21,13 @@
       const d = read(), id = 'p' + Date.now().toString(36);
       d.profiles[id] = { name, dex: {} }; d.current = id; commit(d, id); return id;
     },
+    // ユーザーを削除する（端末の保存から消す）。いま選んでいるユーザーなら、残りの先頭に切りかえる
+    async deleteProfile(pid) {
+      const d = read(); if (!d.profiles[pid]) return;
+      delete d.profiles[pid];
+      if (d.current === pid) d.current = Object.keys(d.profiles)[0] || null;
+      write(d);
+    },
     async getCurrent() { const d = read(); return d.profiles[d.current] ? d.current : null; },
     async setCurrent(id) { const d = read(); if (d.profiles[id]) { d.current = id; write(d); } },
     async getDex(pid) { const p = read().profiles[pid]; return p && p.dex ? p.dex : {}; },

@@ -63,8 +63,20 @@
       const remote = {}; snap.forEach((d) => { remote[d.id] = d.data(); });
       const local = await root.Store.exportProfiles();
       let imported = 0, pushed = 0;
+      // 削除したユーザーの印を、先に送る（前にオフラインで送れなかった分）
+      const c0 = cfg(), deleted = c0.deleted || {};
+      for (const [id, ts] of Object.entries(deleted)) {
+        try { await pushDoc(id, { deleted: true, updatedAt: ts }); delete deleted[id]; } catch (e) { /* つながったときに、また送る */ }
+      }
+      saveCfg({ ...c0, deleted });
       for (const id of new Set([...Object.keys(remote), ...Object.keys(local)])) {
         const r = remote[id], l = local[id];
+        if (deleted[id]) continue;                                   // この端末で削除ずみ（印がまだ送れていない）：取り込まない
+        if (r && r.deleted) {                                        // ほかの端末で削除された
+          if (l && (r.updatedAt || 0) >= (l.updatedAt || 0)) { await root.Store.deleteProfile(id); imported++; }
+          else if (l) { await pushDoc(id, l); pushed++; }            // 削除のあとに、この端末で遊んでいた：残す
+          continue;
+        }
         if (r && (!l || (r.updatedAt || 0) > (l.updatedAt || 0))) { await root.Store.importProfile(id, r); imported++; }
         else if (l && (!r || (l.updatedAt || 0) > (r.updatedAt || 0))) { await pushDoc(id, l); pushed++; }
       }
@@ -76,7 +88,7 @@
   }
   // 変更があったプレイヤーを、少しまとめてからクラウドへ送る
   function schedule(pid) {
-    if (!cfg().familyId) return;
+    if (!cfg().familyId || (cfg().deleted || {})[pid]) return;
     clearTimeout(timers[pid]);
     timers[pid] = setTimeout(async () => {
       try {
@@ -95,7 +107,7 @@
     familyCode: () => (cfg().familyId ? pretty(cfg().familyId) : ''),
     syncNow: syncAll,
 
-    // 新しい家族を作る：家族コードを作り、いまの端末のデータをクラウドへ上げる
+    // 家族につなぐ（新しい家族を作る）：家族コードを作り、いまの端末のデータをクラウドへ上げる
     async createFamily() {
       const f = await sdk(), user = await signIn();
       for (let i = 0; i < 5; i++) {
@@ -122,6 +134,18 @@
       saveCfg({ familyId: id }); attach();
       const r = await syncAll();
       return { code: pretty(id), ...r };
+    },
+    // ユーザーを削除したことを、家族のクラウドに伝える。クラウドのデータは空にして、「削除ずみ」の印を残す
+    // （印がないと、ほかの端末が、古いデータを送り返して復活させてしまう）
+    async deletePlayer(pid) {
+      const c = cfg(); if (!c.familyId) return;
+      const ts = Date.now();
+      saveCfg({ ...c, deleted: { ...(c.deleted || {}), [pid]: ts } });
+      clearTimeout(timers[pid]);
+      try {
+        await signIn(); await pushDoc(pid, { deleted: true, updatedAt: ts });
+        const c2 = cfg(); if (c2.deleted) { delete c2.deleted[pid]; saveCfg(c2); }
+      } catch (e) { setStatus(explain(e)); }
     },
     // この端末だけ切りはなす（クラウドのデータは、そのまま残る）
     leave() { saveCfg({}); root.Store.onChange = null; setStatus(''); },

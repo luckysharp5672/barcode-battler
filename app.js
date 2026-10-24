@@ -41,7 +41,7 @@
   async function loadProfiles() {
     let list = await Store.listProfiles();
     if (!list.length) {
-      // はじめての端末：家族コードで参加すれば、ほかの端末のプレイヤーを受け取れる
+      // はじめての端末：家族コードで参加すれば、ほかの端末のユーザーを受け取れる
       if (window.Cloud && !Cloud.isConnected()) {
         const v = await choose('はじめまして！', [
           { label: '🆕 はじめて遊ぶ（なまえを入れる）', value: 'new' },
@@ -82,8 +82,22 @@
   }
   $('profSel').onchange = async (e) => { await Store.setCurrent(e.target.value); await loadProfiles(); };
   $('btnNewProf').onclick = async () => {
-    const name = (window.prompt('追加する家族のなまえ', '') || '').trim();
+    const name = (window.prompt('追加するユーザーのなまえ', '') || '').trim();
     if (name) { await Store.createProfile(name); await loadProfiles(); }
+  };
+  // ユーザーの削除：このユーザーのデータをすべて消す（家族クラウドにつないでいれば、ほかの端末からも消える）
+  $('btnDelProf').onclick = async () => {
+    const me = (await Store.listProfiles()).find((p) => p.id === cur);
+    if (!me) return;
+    const linked = window.Cloud && Cloud.isConnected();
+    const ok = await choose(`ユーザー「${me.name}」を削除しますか？`, [
+      { label: `戦士 ${Object.keys(dex).length}体・お金 ${player.money.toLocaleString()}・持ち物 ${bagCount()}個など、このユーザーのデータが、すべて消えます。${linked ? '<br><b>家族クラウドにつないでいるので、ほかの端末からも消えます。</b>' : ''}<br>元には戻せません。`, value: 0, disabled: true },
+      { label: '🗑 削除する（元に戻せません）', value: 1 }, { label: 'やめる', value: 0 }]);
+    if (!ok) return;
+    if (linked) await Cloud.deletePlayer(cur);
+    await Store.deleteProfile(cur);
+    await loadProfiles();
+    renderCloud();
   };
   // 同じシール = キャラ(⑤⑥)・キラキラ(⑦⑧)・属性(⑨)が同じ（45と49は同じ扱い、③④は見ない）。1つのシールにつき戦士は1体だけ
   const prefixOf = (code) => BB.identityKey(code);
@@ -1058,14 +1072,14 @@
       mkb('🔄 今すぐ同期', cloudSync); mkb('📋 コードをコピー', cloudCopy); mkb('切断', cloudLeave);
     } else {
       $('cloudState').textContent = '未接続（いまは、この端末にだけ保存されています）';
-      mkb('🆕 新しい家族を作る', cloudCreate); mkb('🔑 家族コードで参加', () => cloudJoin(false));
+      mkb('🔗 家族につなぐ', cloudCreate); mkb('🔑 家族コードで参加', () => cloudJoin(false));
     }
   }
   const cloudMsg = (title, lines) => choose(title, [{ label: lines, value: 0, disabled: true }, { label: 'とじる', value: 0 }]);
   async function cloudCreate() {
-    const ok = await choose('新しい家族を作る', [
-      { label: 'この端末のプレイヤー（図鑑・お金・パーティ）が、クラウドに保存されます。家族コードが作られます。', value: 0, disabled: true },
-      { label: '✅ 作る', value: 1 }, { label: 'やめる', value: 0 }]);
+    const ok = await choose('家族につなぐ', [
+      { label: 'この端末のユーザー（図鑑・お金・パーティ）が、クラウドに保存されます。家族コードが作られます。ほかの端末は、そのコードで同じ家族につなげます。', value: 0, disabled: true },
+      { label: '✅ つなぐ（家族コードを作る）', value: 1 }, { label: 'やめる', value: 0 }]);
     if (!ok) return;
     try {
       const r = await Cloud.createFamily();
@@ -1080,7 +1094,7 @@
       const r = await Cloud.joinFamily(code);
       if (!fromWelcome) await loadProfiles();
       renderCloud();
-      await cloudMsg('参加しました', `家族コード ${r.code} につながりました。<br><span class="small">プレイヤーを ${r.imported}人ぶん受け取り、${r.pushed}人ぶん送りました。</span>`);
+      await cloudMsg('参加しました', `家族コード ${r.code} につながりました。<br><span class="small">ユーザーを ${r.imported}人ぶん受け取り、${r.pushed}人ぶん送りました。</span>`);
     } catch (e) {
       const m = String(e.message);
       await cloudMsg('参加できませんでした', m === 'bad-code' ? '家族コードは12文字です。もう一度、入力してください。' : m === 'not-found' ? 'その家族コードの家族が見つかりません。コードを確かめてください。' : Cloud.explain(e));
