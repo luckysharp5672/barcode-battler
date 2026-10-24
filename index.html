@@ -208,7 +208,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2144</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 20261024-2149</div>
 </section>
 
 <!-- お店 -->
@@ -231,6 +231,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 
 <!-- 見せ合い・選出 -->
 <section id="preview" class="screen">
+  <div class="row" style="margin:0 0 6px"><button data-pickback style="flex:none;width:auto;min-height:36px;padding:4px 14px;font-size:13px">← もどる</button></div>
   <h1>🔍 見せ合い・選出 <span class="small" id="gameNo"></span></h1>
   <p class="sub">見えるのは相手の6体の<b>姿と属性だけ</b>（名前・レベル・アイテム・スキルは非公開）。戦わせる<b>3体</b>を選び、<b>先発と控えの順番</b>を決めます。</p>
   <div class="timerbar">
@@ -244,7 +245,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   <div class="pgrid" id="pvMine"></div>
   <div class="card" id="detailBox"><p class="small">キャラのカードをタップすると、ステータスとスキルがここに出ます</p></div>
   <div id="pickOrder"></div>
-  <div class="row"><button class="pri" id="btnPick" disabled>この3体・この順番で決定</button></div>
+  <div class="row"><button data-pickback style="flex:1">← もどる</button><button class="pri" id="btnPick" disabled style="flex:2">この3体・この順番で決定</button></div>
 </section>
 
 <!-- 3本勝負：試合のあいだ -->
@@ -311,11 +312,11 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=20261024-2144"></script>
-<script src="engine.js?v=20261024-2144"></script>
-<script src="battle.js?v=20261024-2144"></script>
-<script src="store.js?v=20261024-2144"></script>
-<script src="cloud.js?v=20261024-2144"></script>
-<script src="app.js?v=20261024-2144"></script>
+<script src="data.js?v=20261024-2149"></script>
+<script src="engine.js?v=20261024-2149"></script>
+<script src="battle.js?v=20261024-2149"></script>
+<script src="store.js?v=20261024-2149"></script>
+<script src="cloud.js?v=20261024-2149"></script>
+<script src="app.js?v=20261024-2149"></script>
 </body>
 </html>

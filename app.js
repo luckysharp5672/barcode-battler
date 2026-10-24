@@ -575,7 +575,7 @@
       return;
     }
     match = { maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [],
-      herbs: 3 + player.carry.herbs, boost: player.carry.boost };
+      herbs: 3 + player.carry.herbs, boost: player.carry.boost, carryBack: { herbs: player.carry.herbs, boost: player.carry.boost } };
     match.carryText = [player.carry.herbs ? `薬草+${player.carry.herbs}` : '', player.carry.boost ? '経験値×2' : ''].filter(Boolean).join('・');
     if (player.carry.herbs || player.carry.boost) { player.carry = { herbs: 0, boost: false }; await savePlayer(); } // 持ち込みは、試合を始めると使われる
     const mine0 = codes.map((c) => BB.makeFighter(BB.decode(c), null, dex[c].level));
@@ -648,6 +648,19 @@
     await afterGame(winner, foeSel);
   }
   $('btnPick').onclick = confirmPick;
+  // 「もどる」：見せ合い・選出をやめてホームへ。1試合目なら、持ち込み（薬草・ブースト）は使っていないので返す
+  async function backFromPick() {
+    if (match && match.game > 1) {
+      const ok = await choose('3本勝負をやめますか？', [
+        { label: 'ここまでの結果は消えて、経験値もお金ももらえません。', value: 0, disabled: true },
+        { label: 'やめてホームへ', value: 1 }, { label: 'つづける', value: 0 }]);
+      if (!ok) return;
+    }
+    clearInterval(pickTimer);
+    if (match && match.game <= 1 && (match.carryBack.herbs || match.carryBack.boost)) { player.carry = { ...match.carryBack }; await savePlayer(); }
+    match = null; renderWallet(); show('home');
+  }
+  document.querySelectorAll('[data-pickback]').forEach((b) => { b.onclick = backFromPick; });
   $('btnBattle').onclick = () => startMatch(1);
   $('btnBo3').onclick = () => startMatch(3);
   $('btnNext').onclick = nextGame;
