@@ -190,15 +190,17 @@
       .sort((a, b) => b.sc - a.sc)[0].i;
   }
   // CPUのパーティ（6体。同じキャラは1体まで。持ち物は重ならない）
-  function generateCpuParty(avgLv, rng, size = 6) {
+  function generateCpuParty(avgLv, rng, size = 6, itemRate = 0.5) {
     const party = [], idxs = new Set(), items = new Set();
     let guard = 0;
     while (party.length < size && guard++ < 500) {
-      const dec = BB.decode(BB.randomCode('char', rng));
+      let dec = BB.decode(BB.randomCode('char', rng));
+      // 強いステージでは、そのレベルまで育てられるキャラ（限界レベルが足りるもの）だけを選ぶ
+      for (let k = 0; k < 40 && dec.limit < avgLv - 2; k++) dec = BB.decode(BB.randomCode('char', rng));
       if (idxs.has(dec.idx)) continue;
       idxs.add(dec.idx);
       let it = null;
-      if (rng() < 0.5) {
+      if (rng() < itemRate) {
         const cand = BB.itemById(BB.DATA.items[Math.floor(rng() * BB.DATA.items.length)].id);
         if (!items.has(cand.itemId)) { items.add(cand.itemId); it = cand; }
       }

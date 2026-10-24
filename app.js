@@ -676,8 +676,30 @@
     renderPick();
   };
 
+  // CPUの強さ：国名のステージ10段階。CPUのパーティの平均レベルとアイテムの持たせ方が上がる
+  const STAGES = [
+    { flag: '🇯🇵', name: '日本', lv: 2, item: 0.1 }, { flag: '🇰🇷', name: '韓国', lv: 5, item: 0.2 }, { flag: '🇨🇳', name: '中国', lv: 9, item: 0.3 },
+    { flag: '🇮🇳', name: 'インド', lv: 14, item: 0.4 }, { flag: '🇬🇧', name: 'イギリス', lv: 20, item: 0.5 }, { flag: '🇫🇷', name: 'フランス', lv: 27, item: 0.6 },
+    { flag: '🇩🇪', name: 'ドイツ', lv: 34, item: 0.7 }, { flag: '🇧🇷', name: 'ブラジル', lv: 42, item: 0.8 }, { flag: '🇷🇺', name: 'ロシア', lv: 50, item: 0.9 },
+    { flag: '🇺🇸', name: 'アメリカ', lv: 58, item: 1 },
+  ];
+  const STAGE_KEY = 'bb-stage';
+  async function pickStage(games) {
+    let last = 1;
+    try { last = Math.min(10, Math.max(1, +localStorage.getItem(STAGE_KEY) || 1)); } catch (e) { /* 保存できなくても動く */ }
+    const v = await choose(`${games > 1 ? '🏆 3本勝負' : '⚔ シングル'}：ステージ（CPUの強さ）をえらぶ`, [
+      { label: 'CPUのパーティの平均レベルの目安です。数が大きいほど強く、もらえる経験値・お金も多くなります。', value: 0, disabled: true },
+      ...STAGES.map((s, i) => ({ label: `${s.flag} <b>${i + 1}. ${s.name}</b>　<span class="small">強さ Lv${s.lv}ごろ ${'★'.repeat(Math.ceil((i + 1) / 2))}${i + 1 === last ? '　（前回）' : ''}</span>`, value: i + 1 })),
+      { label: '← 戻る', value: -1 }]);
+    if (v <= 0) return 0;
+    try { localStorage.setItem(STAGE_KEY, String(v)); } catch (e) { /* 保存できなくても動く */ }
+    return v;
+  }
   // 試合の開始（games=1 でシングル、3 で3本勝負）
   async function startMatch(games) {
+    const stageNo = await pickStage(games);
+    if (!stageNo) return;
+    const stage = STAGES[stageNo - 1];
     const codes = partyCodes();
     if (codes.length < PICK) {
       const v = await choose('パーティが足りません', [
@@ -686,13 +708,12 @@
       if (v) openParty();
       return;
     }
-    match = { maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [],
+    match = { stage, maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [],
       herbs: 3 + player.carry.herbs, boost: player.carry.boost, carryBack: { herbs: player.carry.herbs, boost: player.carry.boost } };
     match.carryText = [player.carry.herbs ? `薬草+${player.carry.herbs}` : '', player.carry.boost ? '経験値×2' : ''].filter(Boolean).join('・');
     if (player.carry.herbs || player.carry.boost) { player.carry = { herbs: 0, boost: false }; await savePlayer(); } // 持ち込みは、試合を始めると使われる
     const mine0 = codes.map((c) => BB.makeFighter(BB.decode(c), null, dex[c].level));
-    const avg = Math.round(mine0.reduce((a, f) => a + f.level, 0) / mine0.length);
-    match.foeBase = Battle.generateCpuParty(avg, rng, PARTY_MAX);
+    match.foeBase = Battle.generateCpuParty(stage.lv, rng, PARTY_MAX, stage.item);
     await Promise.all(match.foeBase.map(async (f) => { f.canvas = await makeSticker(f, 160); }));
     await Promise.all(codes.map(async (c, i) => { canvasCache[c] = await makeSticker(mine0[i], 160); }));
     await nextGame();
@@ -703,7 +724,7 @@
     myParty = match.codes.map(memberFighter);
     foeParty = match.foeBase.map(foeFresh);
     picked = []; focusMine = 0; foeFocus = null;
-    $('gameNo').textContent = (match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '') + (match.carryText ? `（持ち込み：${match.carryText}）` : '');
+    $('gameNo').textContent = (match.stage ? `（${match.stage.flag} ${match.stage.name}）` : '') + (match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '') + (match.carryText ? `（持ち込み：${match.carryText}）` : '');
     $('matchHist').textContent = match.foeUsedGames.length ? '　印G＝前の試合で出てきた' : '';
     renderPick(); show('preview');
     startPickTimer();
@@ -1512,6 +1533,7 @@
     ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
     ・限界レベルは、キラキラで最初から決まります（ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）。同じシールの別ロットのバーコードで、さらに+5ずつ（最大Lv60）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
+    ・CPUとの対戦は、はじめに<b>ステージ（国名・10段階）</b>をえらびます。後ろの国ほどCPUが強く、もらえる経験値とお金も多くなります。<br>
     ・対戦は「⚔ シングル（1本）」か「🏆 3本勝負（同じ6体で最大3試合、先に2勝）」。相手のパーティと見せ合い、制限時間60秒で戦う3体と、先発・控えの順番を決めます。見えるのは相手の6体の姿と属性だけです。<br>
     ・選ぶときは、カードをタップするとステータス・スキル・アイテムの詳細が出ます。「🔎 相性ヒント」をオンにすると、相手のカードをタップして、自分の6体の有利・不利を確かめられます。<br>
     ・3本勝負では、前の試合で相手が出したキャラに「G」の印が付きます。試合のあとに、相手のパーティが公開されます。<br>
