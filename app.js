@@ -494,9 +494,35 @@
   const HINT_KEY = 'bb-hint';
   let hintOn = true;
   try { hintOn = localStorage.getItem(HINT_KEY) !== '0'; } catch (e) { /* 保存できなくても動く */ }
+  // 属性の相性の輪：矢印の「元」が「先」に有利（炎→風→土→雷→水→炎）。戦闘前・戦闘中に小さく置く。タップで大きく見る
+  const RING_ORDER = [3, 0, 1, 4, 2];
+  function attrRingSvg(size) {
+    const c = size / 2, R = size * 0.36, r = size * 0.13, fs = Math.round(size * 0.17);
+    const pt = (i) => { const t = -Math.PI / 2 + i * 2 * Math.PI / 5; return [c + R * Math.cos(t), c + R * Math.sin(t)]; };
+    let s = `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ra${size}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="${Math.max(4, size / 22)}" markerHeight="${Math.max(4, size / 22)}" orient="auto"><path d="M0,0L10,5L0,10z" fill="#e6edf3"/></marker></defs>`;
+    for (let i = 0; i < 5; i++) {
+      const [x1, y1] = pt(i), [x2, y2] = pt((i + 1) % 5), d = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / d, uy = (y2 - y1) / d;
+      s += `<line x1="${x1 + ux * (r + 1)}" y1="${y1 + uy * (r + 1)}" x2="${x2 - ux * (r + 3)}" y2="${y2 - uy * (r + 3)}" stroke="#e6edf3" stroke-width="${Math.max(1.2, size / 60)}" marker-end="url(#ra${size})"/>`;
+    }
+    RING_ORDER.forEach((a, i) => {
+      const [x, y] = pt(i);
+      s += `<circle cx="${x}" cy="${y}" r="${r}" fill="#161b22" stroke="${ATTR_COLORS[a]}" stroke-width="${Math.max(1.5, size / 50)}"/><text x="${x}" y="${y}" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${BB.ATTRS[a].emoji}</text>`;
+    });
+    return s + '</svg>';
+  }
+  function mountAttrRings() {
+    document.querySelectorAll('[data-attrring]').forEach((el) => {
+      el.innerHTML = attrRingSvg(+el.dataset.attrring || 76);
+      el.onclick = () => modal(`<h3 style="margin:0 0 6px">属性の相性</h3><div style="display:flex;justify-content:center">${attrRingSvg(240)}</div>
+        <p class="small" style="margin:8px 0">矢印の <b>元</b> の属性のこうげきは、<b>先</b> の属性に強い（×1.5）。逆向きは弱い（×0.5）。同じ属性どうしは ×0.75。</p>
+        <p class="small" style="margin:0 0 8px">${RING_ORDER.map((a) => BB.ATTRS[a].emoji + BB.ATTRS[a].name).join(' → ')} → ${BB.ATTRS[RING_ORDER[0]].emoji}${BB.ATTRS[RING_ORDER[0]].name}</p>
+        <button class="pri" style="width:100%" onclick="document.getElementById('modalMask').classList.remove('on')">閉じる</button>`);
+    });
+  }
   const STAT_NAMES = [['hp', '❤️'], ['st', '⚔️'], ['df', '🛡️'], ['dx', '👟'], ['sp', '✨']];
   const canvasCache = {};
 
+  mountAttrRings();
   function detailHtml(f, foeAttrs, opts = {}) {
     const A = BB.ATTRS[f.attr];
     const sts = { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp };
