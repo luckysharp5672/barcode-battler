@@ -24,11 +24,17 @@
     //   { money, bag: { アイテムID: 個数 }, itemCodes: [書籍のバーコード], party: { members: [戦士のコード], items: { 戦士のコード: アイテムID } } }
     async getPlayer(pid) {
       const p = read().profiles[pid] || {};
-      return { money: p.money || 0, bag: p.bag || {}, itemCodes: p.itemCodes || [], party: p.party || { members: [], items: {} } };
+      return {
+        money: p.money || 0, bag: p.bag || {}, itemCodes: p.itemCodes || [], party: p.party || { members: [], items: {} },
+        shop: p.shop || { date: '', bought: [] },                       // 今日買った品
+        train: p.train || { date: '', xp: 0 },                          // 今日の修行の合計
+        carry: p.carry || { herbs: 0, boost: false },                   // 次の試合への持ち込み
+        cosmetics: p.cosmetics || { titles: [], title: '', frames: [], frame: '' },
+      };
     },
     async setPlayer(pid, pl) {
       const d = read(); if (!d.profiles[pid]) return;
-      Object.assign(d.profiles[pid], { money: pl.money, bag: pl.bag, itemCodes: pl.itemCodes, party: pl.party }); write(d);
+      Object.assign(d.profiles[pid], { money: pl.money, bag: pl.bag, itemCodes: pl.itemCodes, party: pl.party, shop: pl.shop, train: pl.train, carry: pl.carry, cosmetics: pl.cosmetics }); write(d);
     },
     // 今日のランダム（戦士・アイテムそれぞれ1日1回）の記録 { char: {date, code}, item: {date, code} }
     async getDaily(pid) { const p = read().profiles[pid]; return p && p.daily ? p.daily : {}; },

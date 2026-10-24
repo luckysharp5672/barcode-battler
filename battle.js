@@ -22,8 +22,8 @@
   const alive = (f) => f.hp > 0;
   const benchAlive = (side) => side.party.map((f, i) => i).filter((i) => i !== side.active && alive(side.party[i]));
 
-  function createSide(name, fighters) {
-    return { name, party: fighters, active: 0, herbs: 3, lastGuard: false, usedItems: [] };
+  function createSide(name, fighters, herbs = 3) {
+    return { name, party: fighters, active: 0, herbs, lastGuard: false, usedItems: [] };
   }
   function createBattle(a, b) { return { sides: [a, b], round: 0, over: false, winner: null }; }
 

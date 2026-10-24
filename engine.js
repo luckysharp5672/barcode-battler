@@ -241,11 +241,41 @@
     return it ? { kind: 'item', code: '', prefix: '', itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) } : null;
   }
 
+  // ---- お店 ----
+  const PRICE_TIER = { 1: 150, 2: 400, 3: 900, 4: 2000 };
+  // 買値。装備は格で決まり、アクセサリーは×1.15、特殊効果つきは×1.2。回復薬は効果で決まる
+  function itemPrice(id) {
+    const it = DATA.items.find((x) => x.id === id), e = it.effect;
+    if (e.kind === 'consumable') {
+      if (e.heal_hp_pct === 100) return 1500;
+      if (e.heal_hp_pct >= 50) return 300;
+      if (e.heal_hp_pct) return 120;
+      if (e.heal_mp) return 200;
+      return 150;
+    }
+    let p = PRICE_TIER[e.tier] || 150;
+    if (e.slot === 'accessory') p *= 1.15;
+    if (e.element || e.inflict || e.resist || e.immune) p *= 1.2;
+    return Math.round(p / 10) * 10;
+  }
+  const sellPrice = (id) => Math.floor(itemPrice(id) / 20) * 10; // 買値の半分
+  // 日替わりの品ぞろえ。同じ文字列（日付＋家族）なら、いつ開いても同じ3つ。固有の強い装備は並ばない
+  function hashStr(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function seeded(seed) {
+    let a = seed | 0;
+    return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function shopStock(seed, n = 3) {
+    const pool = DATA.items.filter((it) => !it.effect.unique), r = seeded(hashStr(seed)), out = [];
+    while (out.length < n) { const it = pool[Math.floor(r() * pool.length)]; if (!out.includes(it.id)) out.push(it.id); }
+    return out;
+  }
+
   const api = {
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, DATA,
+    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, DATA,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BB = api;

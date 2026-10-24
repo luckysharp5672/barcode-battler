@@ -8,7 +8,8 @@
   let cur = null;  // 現在の家族プロフィールID
   let dex = {};    // 現在のプロフィールの図鑑 { code: entry }
   let daily = {};  // 今日のランダムの記録 { char: {date, code}, item: {date, code} }
-  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} } }; // お金・持ち物・手に入れた書籍のコード・パーティ
+  // お金・持ち物・手に入れた書籍のコード・パーティ・お店（今日の購入/修行・持ち込み・見た目）
+  let player = { money: 0, bag: {}, itemCodes: [], party: { members: [], items: {} }, shop: { date: '', bought: [] }, train: { date: '', xp: 0 }, carry: { herbs: 0, boost: false }, cosmetics: { titles: [], title: '', frames: [], frame: '' } };
 
   // ---------- シール画像（キラキラ → 属性エフェクト → キャラ の順に重ねる） ----------
   const imgCache = {};
@@ -48,7 +49,7 @@
     dex = await Store.getDex(cur);
     daily = await Store.getDaily(cur);
     player = await Store.getPlayer(cur);
-    updateRandButtons(); renderWallet();
+    updateRandButtons(); renderWallet(); applyLook();
     // 現在のルールで無効なデータは表示しない（保存データは消さない）。名前・限界は最新のデータに合わせる
     Object.keys(dex).forEach((c) => {
       const d = BB.decode(c);
@@ -220,7 +221,7 @@
   document.querySelectorAll('[data-rand]').forEach((b) => b.onclick = () => onRandom(b.dataset.rand));
   // 持ち物：お金とアイテム
   const bagCount = () => Object.values(player.bag).reduce((a, b) => a + b, 0);
-  function renderWallet() { $('wallet').textContent = `💰 ${player.money.toLocaleString()}　🎒 持ち物 ${bagCount()}個`; }
+  function renderWallet() { $('wallet').textContent = `${titleText() ? '【' + titleText() + '】　' : ''}💰 ${player.money.toLocaleString()}　🎒 持ち物 ${bagCount()}個`; }
   async function savePlayer() { await Store.setPlayer(cur, player); renderWallet(); }
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
@@ -564,7 +565,10 @@
       if (v) openParty();
       return;
     }
-    match = { maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [] };
+    match = { maxGames: games, game: 0, wins: [0, 0], codes, usedMine: [], usedFoe: [], foeUsedGames: [], played: new Set(), foeBase: [],
+      herbs: 3 + player.carry.herbs, boost: player.carry.boost };
+    match.carryText = [player.carry.herbs ? `薬草+${player.carry.herbs}` : '', player.carry.boost ? '経験値×2' : ''].filter(Boolean).join('・');
+    if (player.carry.herbs || player.carry.boost) { player.carry = { herbs: 0, boost: false }; await savePlayer(); } // 持ち込みは、試合を始めると使われる
     const mine0 = codes.map((c) => BB.makeFighter(BB.decode(c), null, dex[c].level));
     const avg = Math.round(mine0.reduce((a, f) => a + f.level, 0) / mine0.length);
     match.foeBase = Battle.generateCpuParty(avg, rng, PARTY_MAX);
@@ -577,7 +581,7 @@
     myParty = match.codes.map(memberFighter);
     foeParty = match.foeBase.map(foeFresh);
     picked = []; focusMine = 0; foeFocus = null;
-    $('gameNo').textContent = match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '';
+    $('gameNo').textContent = (match.maxGames > 1 ? `（第${match.game}試合／先に2勝）` : '') + (match.carryText ? `（持ち込み：${match.carryText}）` : '');
     $('matchHist').textContent = match.foeUsedGames.length ? '　印G＝前の試合で出てきた' : '';
     renderPick(); show('preview');
     startPickTimer();
@@ -663,7 +667,7 @@
       : `${A.emoji}${A.name}属性`;
     const hist = s === 1 && view.hist[1].length ? `<div class="small">あいての直近：${view.hist[1].slice(-3).join('・')}</div>` : '';
     return `<div class="frow"><div class="stk"></div><div class="finfo">
-      <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)} ${f.name}</span><span>Lv${f.level}</span></div>
+      <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)}${s === 0 && titleText() ? '【' + titleText() + '】' : ''} ${f.name}</span><span>Lv${f.level}</span></div>
       <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
       <div class="small">${hpText}${stt ? ' ／ 💫' + stt : ''}</div>
       <div class="small">${detail}</div>${hist}
@@ -749,8 +753,8 @@
 
   // 1試合の対戦。勝者（0=自分 1=相手 -1=引き分け）を返す
   async function runBattle(mineList, foeList) {
-    st = Battle.createBattle(Battle.createSide('あなた', mineList), Battle.createSide('てき', foeList));
-    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
+    st = Battle.createBattle(Battle.createSide('あなた', mineList, match.herbs), Battle.createSide('てき', foeList));
+    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [match.herbs, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
     $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）';
     show('battle'); renderBattle();
@@ -805,7 +809,7 @@
     const members = [];
     for (const code of match.played) {
       const e = dex[code], oldLv = e.level, oldXp = e.xp;
-      e.xp = Math.min(e.xp + (win ? 30 + 5 * avgFoe : 10), BB.xpForLevel(e.maxLv));
+      e.xp = Math.min(e.xp + (win ? 30 + 5 * avgFoe : 10) * (match.boost ? 2 : 1), BB.xpForLevel(e.maxLv));
       const gain = e.xp - oldXp;
       e.level = BB.levelFromXp(e.xp, e.maxLv); e[win ? 'wins' : 'losses']++;
       await Store.saveFighter(cur, e);
@@ -821,7 +825,7 @@
     if (dropId) player.bag[dropId] = (player.bag[dropId] || 0) + 1;
     await savePlayer();
     show('result');
-    renderRewards({ members, gold, drop: dropId ? BB.itemById(dropId) : null });
+    renderRewards({ members, gold, boost: match.boost, drop: dropId ? BB.itemById(dropId) : null });
     $('foeRevealTitle').style.display = 'block';
     renderFoeReveal($('foeReveal'));
   }
@@ -844,7 +848,7 @@
       return `<div style="margin-bottom:8px"><div class="rt">${m.name} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
         <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
     }).join('');
-    add(`<div class="ic">⭐</div><div class="rb"><div class="rt" style="margin-bottom:6px">経験値</div>${rows}</div>`);
+    add(`<div class="ic">⭐</div><div class="rb"><div class="rt" style="margin-bottom:6px">経験値${r.boost ? ' <span class="tag">ブースト×2</span>' : ''}</div>${rows}</div>`);
     add(`<div class="ic">💰</div><div class="rb"><div class="rt">お金 <b>+${r.gold.toLocaleString()}</b></div><div class="small">所持金 ${player.money.toLocaleString()}</div></div>`);
     if (r.drop) {
       const el = add(`<div class="rimg"></div><div class="rb"><div class="rt">🎁 アイテムを手に入れた！</div><div class="rn">${r.drop.name}</div>
@@ -854,6 +858,145 @@
       add('<div class="ic">🎁</div><div class="rb"><div class="rt">アイテム</div><div class="small">今回はなし（まれに手に入ります）</div></div>', 'none');
     }
   }
+
+  // ---------- お店（今日の品・売る・修行・持ち込み・見た目） ----------
+  const TRAIN_DAILY_XP = 600, XP_PRICE = 2;               // 修行：1日600XPまで、1XP=2円
+  const CARRY_HERB_PRICE = 120, CARRY_HERB_MAX = 2, BOOST_PRICE = 250;
+  const TITLES = [
+    { id: 'hunter', name: 'バーコードハンター', price: 300 }, { id: 'collector', name: 'シールコレクター', price: 500 },
+    { id: 'reader', name: '読み合いの達人', price: 1000 }, { id: 'master', name: '属性マスター', price: 1500 },
+    { id: 'legend', name: '伝説の戦士', price: 3000 },
+  ];
+  const FRAMES = [
+    { id: 'gold', name: 'ゴールドの枠', price: 600 }, { id: 'ice', name: 'こおりの枠', price: 900 },
+    { id: 'flame', name: 'ほのおの枠', price: 900 }, { id: 'rainbow', name: 'レインボーの枠', price: 2000 },
+  ];
+  const SHOP_TABS = [['buy', '🛒 今日の品'], ['sell', '💱 売る'], ['train', '🏋 修行'], ['carry', '🎒 持ち込み'], ['look', '✨ 見た目']];
+  let shopTab = 'buy';
+  const yen = (n) => `💰${n.toLocaleString()}`;
+  function ensureDaily() {
+    const t = today();
+    if (player.shop.date !== t) player.shop = { date: t, bought: [] };
+    if (player.train.date !== t) player.train = { date: t, xp: 0 };
+  }
+  function applyLook() { document.body.dataset.frame = player.cosmetics.frame || ''; }
+  const shopMsg = (t) => { $('shopMsg').textContent = t; };
+  function openShop() { ensureDaily(); shopTab = 'buy'; shopMsg(''); renderShop(); show('shop'); }
+  function renderShop() {
+    ensureDaily();
+    $('shopWallet').textContent = `所持金 ${yen(player.money)}　🎒 持ち物 ${bagCount()}個`;
+    const tabs = $('shopTabs'); tabs.innerHTML = '';
+    SHOP_TABS.forEach(([id, label]) => {
+      const b = document.createElement('button'); b.textContent = label; if (id === shopTab) b.className = 'on';
+      b.onclick = () => { shopTab = id; shopMsg(''); renderShop(); };
+      tabs.appendChild(b);
+    });
+    const box = $('shopBox'); box.innerHTML = '';
+    ({ buy: shopBuy, sell: shopSell, train: shopTrain, carry: shopCarry, look: shopLook })[shopTab](box);
+  }
+  // 1行のカード：サムネイル（任意）・説明・ボタン
+  function srow(box, { thumb, html, buttons }) {
+    const row = document.createElement('div'); row.className = 'srow';
+    if (thumb) { const th = document.createElement('div'); th.className = 'pth'; row.appendChild(th); thumb(th); }
+    const info = document.createElement('div'); info.className = 'pinfo'; info.style.flex = '1'; info.innerHTML = html; row.appendChild(info);
+    const bs = document.createElement('div'); bs.className = 'pbtns'; row.appendChild(bs);
+    buttons.forEach(([label, fn, dis]) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; bs.appendChild(b); });
+    box.appendChild(row); return row;
+  }
+  const itemThumb = (id) => (th) => makeSticker(BB.itemById(id), 128).then((c) => th.appendChild(c));
+  async function pay(cost) { player.money -= cost; await savePlayer(); }
+
+  // 🛒 今日の品：毎日かわる3つ（家族ごと）。同じ品は1日1個
+  function shopBuy(box) {
+    box.insertAdjacentHTML('beforeend', '<p class="small">品ぞろえは毎日かわります。同じ品は1日1個まで。</p>');
+    BB.shopStock(`${today()}-${cur}`, 3).forEach((id) => {
+      const d = BB.itemById(id), price = BB.itemPrice(id), got = player.shop.bought.includes(id);
+      srow(box, {
+        thumb: itemThumb(id), html: `<b>${d.name}</b><div class="small">${d.text}</div><div>${yen(price)}${got ? '　<span class="tag">売り切れ</span>' : ''}</div>`,
+        buttons: [[got ? '買った' : '買う', async () => {
+          if (player.money < price) return;
+          player.bag[id] = (player.bag[id] || 0) + 1; player.shop.bought.push(id); await pay(price);
+          shopMsg(`🛒 ${d.name} を買いました（-${price}）`); renderShop();
+        }, got || player.money < price]],
+      });
+    });
+  }
+  // 💱 売る：持ち物を買値の半分で（パーティが持たせている分は、1個のこす）
+  function shopSell(box) {
+    const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
+    box.insertAdjacentHTML('beforeend', '<p class="small">持ち物を、買値の半分で売れます。パーティに持たせているアイテムは、1個のこります。</p>');
+    if (!ids.length) { box.insertAdjacentHTML('beforeend', '<p class="small">持ち物がありません。</p>'); return; }
+    ids.forEach((id) => {
+      const d = BB.itemById(id), price = BB.sellPrice(id), sellable = player.bag[id] - (heldBy(id) ? 1 : 0);
+      srow(box, {
+        thumb: itemThumb(id), html: `<b>${d.name}</b> ×${player.bag[id]}<div class="small">${d.text}</div><div>売値 ${yen(price)}${heldBy(id) ? '　<span class="tag">持たせ中</span>' : ''}</div>`,
+        buttons: [['1個売る', async () => {
+          player.bag[id]--; if (player.bag[id] <= 0) delete player.bag[id];
+          player.money += price; await savePlayer(); shopMsg(`💱 ${d.name} を売りました（+${price}）`); renderShop();
+        }, sellable <= 0]],
+      });
+    });
+  }
+  // 🏋 修行：お金で経験値を買う（1日600XPまで。限界レベルは超えない）
+  function shopTrain(box) {
+    const remain = TRAIN_DAILY_XP - player.train.xp;
+    box.insertAdjacentHTML('beforeend', `<p class="small">1XP＝${XP_PRICE}円。今日の修行ののこり <b>${remain}</b> / ${TRAIN_DAILY_XP} XP（日付が変わると戻ります）。限界レベルを超えては上がりません。</p>`);
+    const list = Object.values(dex).sort((a, b) => b.level - a.level || b.xp - a.xp);
+    if (!list.length) box.insertAdjacentHTML('beforeend', '<p class="small">図鑑に戦士がいません。</p>');
+    list.forEach((e) => {
+      const capXp = BB.xpForLevel(e.maxLv), base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
+      const pct = e.level >= e.maxLv ? 100 : Math.round((e.xp - base) / need * 100);
+      const A = BB.ATTRS[e.attr];
+      const gainOf = (req) => Math.max(0, Math.min(req, capXp - e.xp, remain));
+      const btn = (req) => {
+        const g = gainOf(req), cost = g * XP_PRICE;
+        return [g > 0 ? `+${g}XP ${cost}円` : '+' + req + 'XP', async () => {
+          const old = e.level; e.xp += g; e.level = BB.levelFromXp(e.xp, e.maxLv); player.train.xp += g;
+          await Store.saveFighter(cur, e); await pay(cost);
+          shopMsg(`🏋 ${e.name} の経験値 +${g}${e.level > old ? `　🎉 レベルアップ！ Lv${old} → Lv${e.level}` : ''}`); renderShop();
+        }, g <= 0 || player.money < cost];
+      };
+      srow(box, {
+        thumb: (th) => makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c)),
+        html: `<b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}<div class="mini"><div style="width:${pct}%"></div></div><div class="small">${e.level >= e.maxLv ? '限界です' : `経験値 ${e.xp}（Lv${e.level + 1}まで あと ${need - (e.xp - base)}）`}</div>`,
+        buttons: [btn(50), btn(200)],
+      });
+    });
+  }
+  // 🎒 持ち込み：次の試合だけ有効（試合を始めると使われる）
+  function shopCarry(box) {
+    box.insertAdjacentHTML('beforeend', '<p class="small">買った分は、<b>次の試合だけ</b>有効です（試合を始めると使われます。3本勝負なら、その3試合ぶん）。</p>');
+    const c = player.carry;
+    srow(box, {
+      html: `<b>🌿 薬草 +1</b><div class="small">薬草が3個→4個（最大+${CARRY_HERB_MAX}まで）。いま +${c.herbs}</div><div>${yen(CARRY_HERB_PRICE)}</div>`,
+      buttons: [['買う', async () => { c.herbs++; await pay(CARRY_HERB_PRICE); shopMsg('🌿 薬草を持ち込みます（次の試合）'); renderShop(); }, c.herbs >= CARRY_HERB_MAX || player.money < CARRY_HERB_PRICE]],
+    });
+    srow(box, {
+      html: `<b>⏫ 経験値ブースト</b><div class="small">次の試合で、出場したキャラの経験値が×2${c.boost ? '　<span class="tag">予約中</span>' : ''}</div><div>${yen(BOOST_PRICE)}</div>`,
+      buttons: [[c.boost ? '予約ずみ' : '買う', async () => { c.boost = true; await pay(BOOST_PRICE); shopMsg('⏫ 次の試合で経験値が2倍になります'); renderShop(); }, c.boost || player.money < BOOST_PRICE]],
+    });
+  }
+  // ✨ 見た目：称号（名前の横）とシールの枠（自分のキャラだけ）。強さには関係しません
+  function shopLook(box) {
+    const cs = player.cosmetics;
+    box.insertAdjacentHTML('beforeend', '<p class="small">見た目だけで、強さには関係しません。称号は、ホームと対戦中の名前の横に出ます。枠は、自分のキャラのシールに付きます。</p><h2 class="small">称号</h2>');
+    const item = (list, ownedKey, curKey, kind) => list.forEach((x) => {
+      const owned = cs[ownedKey].includes(x.id), on = cs[curKey] === x.id;
+      srow(box, {
+        html: `<b>${kind === 'title' ? '【' + x.name + '】' : x.name}</b>${on ? '　<span class="tag">つけている</span>' : ''}<div>${owned ? '持っている' : yen(x.price)}</div>`,
+        buttons: [[owned ? (on ? 'はずす' : 'つける') : '買う', async () => {
+          if (!owned) { cs[ownedKey].push(x.id); await pay(x.price); }
+          cs[curKey] = on ? '' : x.id; await savePlayer(); applyLook(); renderShop();
+        }, !owned && player.money < x.price]],
+      });
+    });
+    item(TITLES, 'titles', 'title', 'title');
+    box.insertAdjacentHTML('beforeend', '<h2 class="small" style="margin-top:12px">シールの枠</h2>');
+    item(FRAMES, 'frames', 'frame', 'frame');
+  }
+  const titleText = () => { const t = TITLES.find((x) => x.id === player.cosmetics.title); return t ? t.name : ''; };
+  $('btnShop').onclick = openShop;
+  $('btnShopBack').onclick = () => { renderWallet(); show('home'); };
 
   // ---------- ボタン ----------
   $('btnAgain').onclick = () => startMatch(match ? match.maxGames : 1);
@@ -871,6 +1014,7 @@
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
+    ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（1日600XPまで）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 

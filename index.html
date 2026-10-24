@@ -137,6 +137,23 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 .flip .fr canvas{width:100%;height:100%}
 .flip.hid .bk{filter:grayscale(.3)}
 .flip .qq{position:absolute;bottom:4px;font-size:11px;color:#fff;text-shadow:0 1px 2px #000}
+
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:8px 0}
+.tabs button{flex:none;min-height:38px;padding:6px 12px;font-size:13px}
+.tabs button.on{background:var(--acc);color:#1a1300;border-color:var(--acc);font-weight:700}
+.srow{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px;margin-bottom:8px}
+.srow .pth{width:64px;height:64px}
+.srow .pinfo{font-size:13px}
+.srow .pbtns button{min-height:36px;padding:4px 10px;font-size:13px;white-space:nowrap}
+.mini{height:6px;background:#0d1117;border-radius:3px;overflow:hidden;border:1px solid var(--line);margin-top:4px}
+.mini>div{height:100%;background:linear-gradient(90deg,#3fb950,#a3e635)}
+/* シールの枠（自分のキャラだけ） */
+body[data-frame="gold"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #f0b429;box-shadow:0 0 14px #f0b429aa}
+body[data-frame="ice"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #7fdbff;box-shadow:0 0 14px #7fdbffaa}
+body[data-frame="flame"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #ff7b72;box-shadow:0 0 16px #ff4d00cc;animation:flick 1s infinite alternate}
+@keyframes flick{to{box-shadow:0 0 6px #ff4d0066;outline-color:#ffb86b}}
+body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk,.dstk){outline:3px solid #ff5f5f;animation:rbw 3s linear infinite}
+@keyframes rbw{0%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}20%{outline-color:#ffd24d;box-shadow:0 0 14px #ffd24d}40%{outline-color:#5fff8a;box-shadow:0 0 14px #5fff8a}60%{outline-color:#5fd2ff;box-shadow:0 0 14px #5fd2ff}80%{outline-color:#b06bff;box-shadow:0 0 14px #b06bff}100%{outline-color:#ff5f5f;box-shadow:0 0 14px #ff5f5f}}
 </style>
 </head>
 <body>
@@ -183,7 +200,17 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
     <button class="pri" id="btnBattle">⚔ シングル（1本）</button>
     <button class="pri" id="btnBo3">🏆 3本勝負</button>
   </div>
-  <div class="row"><button id="btnHelp">📖 あそびかた</button></div>
+  <div class="row"><button id="btnShop">🏪 お店</button><button id="btnHelp">📖 あそびかた</button></div>
+</section>
+
+<!-- お店 -->
+<section id="shop" class="screen">
+  <h1>🏪 お店</h1>
+  <div class="small" id="shopWallet"></div>
+  <div class="tabs" id="shopTabs"></div>
+  <div class="info" id="shopMsg"></div>
+  <div id="shopBox"></div>
+  <div class="row"><button class="pri" id="btnShopBack">← ホームへ</button></div>
 </section>
 
 <!-- パーティ編成 -->
