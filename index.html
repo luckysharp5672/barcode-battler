@@ -85,6 +85,10 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 .chip{font-size:11px;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
 .chip.on{border-color:var(--acc);color:var(--fg)}
 .chip.dead{opacity:.35;text-decoration:line-through}
+.orow{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px;margin-bottom:6px;font-size:14px}
+.orow .lb{flex:none;width:52px;font-size:12px;font-weight:700;color:var(--acc)}
+.orow .nm2{flex:1;min-width:0}
+.orow button{flex:none;min-height:34px;padding:4px 10px}
 </style>
 </head>
 <body>
@@ -144,12 +148,13 @@ video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:
 <!-- 見せ合い・選出 -->
 <section id="preview" class="screen">
   <h1>🔍 見せ合い・選出</h1>
-  <p class="sub">相手のパーティを見て、戦わせる3体を、順番に選びます（最初の1体が先発）。のこり <b id="pickTimer">60</b> 秒</p>
-  <h2 class="small">あいて</h2>
+  <p class="sub">見えるのは相手の6体の<b>姿と属性だけ</b>（名前・レベル・アイテム・スキルは非公開）。相手を見ながら、戦わせる3体を選び、<b>先発と控えの順番</b>を決めます。のこり <b id="pickTimer">60</b> 秒</p>
+  <h2 class="small">あいて（6体）</h2>
   <div class="pgrid" id="pvFoe"></div>
-  <h2 class="small">あなた（タップで選ぶ）</h2>
+  <h2 class="small">あなた（タップで3体を選ぶ）</h2>
   <div class="pgrid" id="pvMine"></div>
-  <div class="row"><button class="pri" id="btnPick" disabled>この3体で決定</button></div>
+  <div id="pickOrder"></div>
+  <div class="row"><button class="pri" id="btnPick" disabled>この3体・この順番で決定</button></div>
 </section>
 
 <!-- 対戦 -->

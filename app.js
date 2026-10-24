@@ -397,17 +397,27 @@
     const id = player.party.items[code];
     return BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
   }
-  function pcard(f, onClick) {
+  // hidden=true（相手の6体）は、姿（シール）と属性だけ。名前・レベル・アイテム・スキルは見せない
+  function pcard(f, onClick, hidden) {
     const A = BB.ATTRS[f.attr];
     const el = document.createElement('div'); el.className = 'pcard';
     const th = document.createElement('div'); th.className = 'pth'; th.appendChild(f.canvas); el.appendChild(th);
-    el.insertAdjacentHTML('beforeend', `<div>${A.emoji} ${f.name}</div><div class="small">Lv${f.level}${f.item ? ' ／ 🎁' : ''}</div>`);
+    el.insertAdjacentHTML('beforeend', hidden
+      ? `<div>${A.emoji} ${A.name}属性</div>`
+      : `<div>${A.emoji} ${f.name}</div><div class="small">Lv${f.level}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`);
     if (onClick) el.onclick = onClick;
     return el;
   }
+  const ORDER_LABELS = ['先発', '控え①', '控え②'];
+  function movePick(at, dir) {
+    const to = at + dir;
+    if (to < 0 || to >= picked.length) return;
+    [picked[at], picked[to]] = [picked[to], picked[at]];
+    renderPick();
+  }
   function renderPick() {
     $('pvFoe').innerHTML = ''; $('pvMine').innerHTML = '';
-    foeParty.forEach((f) => $('pvFoe').appendChild(pcard(f)));
+    foeParty.forEach((f) => $('pvFoe').appendChild(pcard(f, null, true)));
     myParty.forEach((f, i) => {
       const el = pcard(f, () => {
         const at = picked.indexOf(i);
@@ -418,6 +428,19 @@
       if (at >= 0) { el.classList.add('sel'); el.insertAdjacentHTML('afterbegin', `<span class="pk">${at + 1}</span>`); }
       $('pvMine').appendChild(el);
     });
+    // 先発と控えの順番（▲▼で入れかえる）
+    const box = $('pickOrder'); box.innerHTML = '';
+    for (let k = 0; k < PICK; k++) {
+      const f = picked[k] !== undefined ? myParty[picked[k]] : null;
+      const row = document.createElement('div'); row.className = 'orow';
+      row.innerHTML = `<span class="lb">${ORDER_LABELS[k]}</span><span class="nm2">${f ? `${BB.ATTRS[f.attr].emoji} ${f.name} <span class="small">Lv${f.level}</span>` : '<span class="small">（まだ選んでいません）</span>'}</span>`;
+      if (f) {
+        const up = document.createElement('button'); up.textContent = '▲'; up.disabled = k === 0; up.onclick = () => movePick(k, -1);
+        const dn = document.createElement('button'); dn.textContent = '▼'; dn.disabled = k === picked.length - 1; dn.onclick = () => movePick(k, 1);
+        row.appendChild(up); row.appendChild(dn);
+      }
+      box.appendChild(row);
+    }
     $('btnPick').disabled = picked.length !== PICK;
   }
   async function startSingle() {
@@ -466,12 +489,19 @@
     const col = pct > 50 ? 'var(--hp)' : pct > 20 ? 'var(--hp2)' : 'var(--hp3)';
     const stt = Object.keys(f.status).filter((k) => f.status[k] > 0).map((k) => STATUS_JA[k]).join('・');
     const atk = f.atkAttr !== f.attr ? `（攻:${BB.ATTRS[f.atkAttr].name}）` : '', body = f.bodyAttr !== f.attr ? `（体:${BB.ATTRS[f.bodyAttr].name}）` : '';
-    const chips = side.party.map((m, i) => `<span class="chip ${i === idx ? 'on' : ''} ${view.hp[s][i] <= 0 ? 'dead' : ''}">${m.name}</span>`).join('');
+    const chips = side.party.map((m, i) => {
+      const known = s === 0 || view.seen[s].has(i);   // 相手の控えは、場に出てくるまで「？」
+      return `<span class="chip ${i === idx ? 'on' : ''} ${view.hp[s][i] <= 0 ? 'dead' : ''}">${known ? m.name : '？'}</span>`;
+    }).join('');
+    const hpText = s === 0 ? `HP ${hp}/${f.maxHp}` : `HP ${Math.ceil(pct)}%`;                  // 相手のHPは%だけ
+    const detail = s === 0
+      ? `${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}`
+      : `${A.emoji}${A.name}属性`;                                                             // 相手の装備・スキルの状態は非公開
     return `<div class="frow"><div class="stk"></div><div class="finfo">
       <div class="top"><span style="color:var(--${s === 0 ? 'me' : 'foe'})">${sideName(s)} ${f.name}</span><span>Lv${f.level}</span></div>
       <div class="hpwrap"><div class="hpbar" style="width:${pct}%;background:${col}"></div></div>
-      <div class="small">HP ${hp}/${f.maxHp}${stt ? ' ／ 💫' + stt : ''}</div>
-      <div class="small">${A.emoji}${A.name}${atk}${body} ／ 🌿${view.herbs[s]} ／ ✨${f.spCd > 0 ? 'あと' + f.spCd : '使える'}${f.item && (f.item.effect.kind !== 'consumable' || f.consumable) ? '／🎁' + f.item.name : ''}</div>
+      <div class="small">${hpText}${stt ? ' ／ 💫' + stt : ''}</div>
+      <div class="small">${detail}</div>
       <div class="chips">${chips}</div></div></div>`;
   }
   function renderBattle() {
@@ -493,7 +523,7 @@
       switch (e.t) {
         case 'switch':
           say(`${sideName(e.s)}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
-          view.active[e.s] = e.idx; renderBattle(); await sleep(700); break;
+          view.active[e.s] = e.idx; view.seen[e.s].add(e.idx); renderBattle(); await sleep(700); break;
         case 'use': say(`${e.who} の ${e.skill}！`); await sleep(450); break;
         case 'miss': say('しかし攻撃は外れた！'); await sleep(500); break;
         case 'msg': say(e.text); await sleep(600); break;
@@ -549,7 +579,7 @@
 
   async function runBattle(mineList, foeList) {
     st = Battle.createBattle(Battle.createSide('あなた', mineList), Battle.createSide('てき', foeList));
-    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3] };
+    view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [3, 3], seen: [new Set([0]), new Set([0])] };
     logLines = [];
     $('starLine').textContent = '相性：炎→風→土→雷→水→炎（有利×1.5／不利×0.5／同属性×0.75）　交代 → 優先度の高いスキル → DXの高い順';
     show('battle'); renderBattle();

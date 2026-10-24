@@ -156,9 +156,9 @@
     // 倒せるなら、優先度の高い技で確実に
     if (av.includes('quick') && expectedDamage(u, d, 'quick') >= d.hp) return { type: 'skill', skill: 'quick' };
     // 相性が悪ければ、控えと交代することがある
-    const bad = BB.affinity(d.atkAttr, u.bodyAttr) > 1 && BB.affinity(u.atkAttr, d.bodyAttr) < 1;
+    const bad = BB.affinity(d.attr, u.bodyAttr) > 1 && BB.affinity(u.atkAttr, d.attr) < 1;
     if (bad && bench.length && rng() < 0.4) {
-      const best = bench.map((i) => ({ i, sc: BB.affinity(side.party[i].atkAttr, d.bodyAttr) - BB.affinity(d.atkAttr, side.party[i].bodyAttr) + side.party[i].hp / side.party[i].maxHp }))
+      const best = bench.map((i) => ({ i, sc: BB.affinity(side.party[i].atkAttr, d.attr) - BB.affinity(d.attr, side.party[i].bodyAttr) + side.party[i].hp / side.party[i].maxHp }))
         .sort((a, b) => b.sc - a.sc)[0];
       return { type: 'switch', to: best.i };
     }
@@ -173,13 +173,13 @@
   }
   // CPUの選出：相手の6体に対して相性がよく、レベルの高い順に n 体。先頭が先発
   function cpuSelect(myParty, foeParty, n) {
-    const score = (f) => f.level + 12 * foeParty.reduce((a, p) => a + BB.affinity(f.atkAttr, p.bodyAttr) - BB.affinity(p.atkAttr, f.bodyAttr), 0) / foeParty.length;
+    const score = (f) => f.level + 12 * foeParty.reduce((a, p) => a + BB.affinity(f.atkAttr, p.attr) - BB.affinity(p.attr, f.bodyAttr), 0) / foeParty.length;
     return myParty.map((f, i) => ({ i, sc: score(f) })).sort((a, b) => b.sc - a.sc).slice(0, n).map((x) => x.i);
   }
   // CPUの代わりのキャラ
   function cpuReplace(st, s) {
     const side = st.sides[s], d = actOf(st, 1 - s);
-    return benchAlive(side).map((i) => ({ i, sc: BB.affinity(side.party[i].atkAttr, d.bodyAttr) - BB.affinity(d.atkAttr, side.party[i].bodyAttr) + side.party[i].level / 100 }))
+    return benchAlive(side).map((i) => ({ i, sc: BB.affinity(side.party[i].atkAttr, d.attr) - BB.affinity(d.attr, side.party[i].bodyAttr) + side.party[i].level / 100 }))
       .sort((a, b) => b.sc - a.sc)[0].i;
   }
   // CPUのパーティ（6体。同じキャラは1体まで。持ち物は重ならない）
