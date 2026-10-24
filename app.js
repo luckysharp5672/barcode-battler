@@ -41,8 +41,17 @@
   async function loadProfiles() {
     let list = await Store.listProfiles();
     if (!list.length) {
-      const name = (window.prompt('なまえを入力してください', '') || '').trim() || 'プレイヤー';
-      await Store.createProfile(name); list = await Store.listProfiles();
+      // はじめての端末：家族コードで参加すれば、ほかの端末のプレイヤーを受け取れる
+      if (window.Cloud && !Cloud.isConnected()) {
+        const v = await choose('はじめまして！', [
+          { label: '🆕 はじめて遊ぶ（なまえを入れる）', value: 'new' },
+          { label: '🔑 家族コードで参加（ほかの端末のデータを使う）', value: 'join' }]);
+        if (v === 'join') { await cloudJoin(true); list = await Store.listProfiles(); }
+      }
+      if (!list.length) {
+        const name = (window.prompt('なまえを入力してください', '') || '').trim() || 'プレイヤー';
+        await Store.createProfile(name); list = await Store.listProfiles();
+      }
     }
     cur = (await Store.getCurrent()) || list[0].id;
     $('profSel').innerHTML = list.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>👤 ${p.name}</option>`).join('');
@@ -998,6 +1007,59 @@
   $('btnShop').onclick = openShop;
   $('btnShopBack').onclick = () => { renderWallet(); show('home'); };
 
+  // ---------- 家族クラウド ----------
+  function renderCloud() {
+    const box = $('cloudBtns'); box.innerHTML = '';
+    if (!window.Cloud) { $('cloudState').textContent = 'クラウドは使えません（この端末にだけ保存されます）'; return; }
+    const mkb = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; box.appendChild(b); };
+    if (Cloud.isConnected()) {
+      $('cloudState').innerHTML = `☁ 接続中　家族コード：<b>${Cloud.familyCode()}</b><br>${Cloud.status() || ''}`;
+      mkb('🔄 今すぐ同期', cloudSync); mkb('📋 コードをコピー', cloudCopy); mkb('切断', cloudLeave);
+    } else {
+      $('cloudState').textContent = '未接続（いまは、この端末にだけ保存されています）';
+      mkb('🆕 新しい家族を作る', cloudCreate); mkb('🔑 家族コードで参加', () => cloudJoin(false));
+    }
+  }
+  const cloudMsg = (title, lines) => choose(title, [{ label: lines, value: 0, disabled: true }, { label: 'とじる', value: 0 }]);
+  async function cloudCreate() {
+    const ok = await choose('新しい家族を作る', [
+      { label: 'この端末のプレイヤー（図鑑・お金・パーティ）が、クラウドに保存されます。家族コードが作られます。', value: 0, disabled: true },
+      { label: '✅ 作る', value: 1 }, { label: 'やめる', value: 0 }]);
+    if (!ok) return;
+    try {
+      const r = await Cloud.createFamily();
+      renderCloud();
+      await cloudMsg('家族コードができました', `<b style="font-size:20px">${r.code}</b><br><span class="small">ほかの端末で「🔑 家族コードで参加」に入れると、同じデータで遊べます。<b>家族以外には教えないでください。</b>メモしておくと安心です。</span>`);
+    } catch (e) { await cloudMsg('作れませんでした', Cloud.explain(e)); }
+  }
+  async function cloudJoin(fromWelcome) {
+    const code = (window.prompt('家族コード（12文字。例：k7m2-x9qa-4tzp）を入力してください', '') || '').trim();
+    if (!code) return;
+    try {
+      const r = await Cloud.joinFamily(code);
+      if (!fromWelcome) await loadProfiles();
+      renderCloud();
+      await cloudMsg('参加しました', `家族コード ${r.code} につながりました。<br><span class="small">プレイヤーを ${r.imported}人ぶん受け取り、${r.pushed}人ぶん送りました。</span>`);
+    } catch (e) {
+      const m = String(e.message);
+      await cloudMsg('参加できませんでした', m === 'bad-code' ? '家族コードは12文字です。もう一度、入力してください。' : m === 'not-found' ? 'その家族コードの家族が見つかりません。コードを確かめてください。' : Cloud.explain(e));
+    }
+  }
+  async function cloudSync() {
+    try { const r = await Cloud.syncNow(); if (r.imported) await loadProfiles(); } catch (e) { /* 状態は画面に出る */ }
+    renderCloud();
+  }
+  async function cloudCopy() {
+    const code = Cloud.familyCode();
+    try { await navigator.clipboard.writeText(code); await cloudMsg('コピーしました', code); } catch (e) { await cloudMsg('家族コード', `<b style="font-size:20px">${code}</b>`); }
+  }
+  async function cloudLeave() {
+    const ok = await choose('切断しますか？', [
+      { label: 'この端末だけ、家族クラウドとのつながりを切ります。クラウドのデータは、そのまま残ります（コードを入れれば、また参加できます）。', value: 0, disabled: true },
+      { label: '切断する', value: 1 }, { label: 'やめる', value: 0 }]);
+    if (ok) { Cloud.leave(); renderCloud(); }
+  }
+
   // ---------- ボタン ----------
   $('btnAgain').onclick = () => startMatch(match ? match.maxGames : 1);
   $('btnHome').onclick = () => { renderWallet(); show('home'); };
@@ -1014,9 +1076,14 @@
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
+    ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
     ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（1日600XPまで）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 
-  loadProfiles();
+  if (window.Cloud) Cloud.onStatus = renderCloud;
+  loadProfiles().then(() => {
+    renderCloud();
+    if (window.Cloud) Cloud.init(() => loadProfiles());   // つながっていれば、起動時に同期（新しいデータがあれば取り込む）
+  });
 })();
