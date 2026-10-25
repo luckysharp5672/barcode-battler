@@ -34,12 +34,15 @@
     return null;
   }
   // 同じシール（キャラ・キラキラ・属性が同じ）を表すキー。45と49は同じ扱い。戦士は ⑤〜⑨ の5桁で決まるので、③④は見ない
+  // コラボの戦士の図鑑キーは 'c' + 13桁（通常のスキャンで使ったバーコードとは、別の枠になる）
   function identityKey(code, collab) {
-    const s = String(code);
-    return prefixKind(s) === 'char' ? (collab || COLLAB.codes.has(s) ? 'cx' : '4x') + s.slice(4, 9) : s.slice(0, 7);
+    let s = String(code);
+    const c = collab || s[0] === 'c';
+    if (s[0] === 'c') s = s.slice(1);
+    return prefixKind(s) === 'char' ? (c ? 'cx' : '4x') + s.slice(4, 9) : s.slice(0, 7);
   }
   // コラボキャラ（合言葉つきの collab.bin を collab.js が読んで setCollab に渡す）。
-  // 同じ⑤〜⑨でも、通常のシールとは別のシール。コラボで手に入れたコードは COLLAB.codes に入る
+  // 同じ⑤〜⑨でも、通常のシールとは別のシール
   const COLLAB = { chars: [], map: [], codes: new Set(), ready: false };
   function setCollab(b) { COLLAB.chars = b.chars; COLLAB.map = b.map; COLLAB.ready = true; }
   function setCollabCodes(list) { COLLAB.codes = new Set(list); }
@@ -75,12 +78,13 @@
   //   戦士(45/49): ⑤⑥=キャラ(00〜99)、⑦⑧=キラキラ(00〜99)、⑨=属性(% 5)。③④は使わない
   //   アイテム(9784): ⑤⑥⑦=000〜999 → 番号 % 68
   function decode(code, collab) {
-    if (!isValidJan(code)) return null;
-    const kind = prefixKind(code);
+    const s0 = String(code), isC = collab || s0[0] === 'c', s = s0[0] === 'c' ? s0.slice(1) : s0;   // 'c'始まり＝コラボの図鑑キー
+    if (!isValidJan(s)) return null;
+    const kind = prefixKind(s);
     if (!kind) return null;
-    const s = String(code), g = (n) => +s[n - 1];
-    const base = { code: s, prefix: identityKey(s), kind };
-    if (kind === 'char' && (collab || COLLAB.codes.has(s))) {
+    const g = (n) => +s[n - 1];
+    const base = { code: isC && kind === 'char' ? 'c' + s : s, prefix: identityKey(s, isC), kind };
+    if (kind === 'char' && isC) {
       if (!COLLAB.ready) return null;                 // 合言葉がまだ（この端末では見えない）
       const ci = COLLAB.map[g(5) * 10 + g(6)], c = COLLAB.chars[ci], kk = kirakiraOf(g(7) * 10 + g(8));
       return { ...base, prefix: identityKey(s, true), idx: 100 + ci, id: 'collab-' + ci, name: c.name, breed: '犬', role: c.role, type: c.type, init: c.init, growth: c.growth,

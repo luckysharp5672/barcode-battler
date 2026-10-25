@@ -59,7 +59,6 @@
     daily = await Store.getDaily(cur);
     player = await Store.getPlayer(cur);
     updateRandButtons(); renderWallet(); applyLook();
-    BB.setCollabCodes(Object.values(dex).filter((e) => e.collab).map((e) => e.code));   // コラボの戦士のコード（合言葉が未入力の端末では、見えないだけ）
     // 現在のルールで無効なデータは表示しない（保存データは消さない）。名前・限界は最新のデータに合わせる
     Object.keys(dex).forEach((c) => {
       const d = BB.decode(c);
@@ -73,7 +72,7 @@
     // 45と49で同じ戦士になった重複は、経験値が多い方を残す
     const seen = {};
     Object.values(dex).forEach((e) => {
-      const k = BB.identityKey(e.code, e.collab), o = seen[k];
+      const k = BB.identityKey(e.code), o = seen[k];
       if (!o) { seen[k] = e; return; }
       const keep = e.xp > o.xp ? e : o;
       delete dex[(keep === e ? o : e).code]; seen[k] = keep;
@@ -101,13 +100,14 @@
     renderCloud();
   };
   // 同じシール = キャラ(⑤⑥)・キラキラ(⑦⑧)・属性(⑨)が同じ（45と49は同じ扱い、③④は見ない）。1つのシールにつき戦士は1体だけ
-  const prefixOf = (code, collab) => BB.identityKey(code, collab);
+  const prefixOf = (code) => BB.identityKey(code);
   // バーコードの扱いを判定する（図鑑は変更しない）
   function lookup(code, collab) {
-    if (dex[code]) return { type: 'known', entry: dex[code] };
-    const e = Object.values(dex).find((x) => prefixOf(x.code, x.collab) === prefixOf(code, collab));
+    const key = collab ? 'c' + code : code;            // コラボは別の枠（同じバーコードを、通常とコラボで1回ずつ使える）
+    if (dex[key]) return { type: 'known', entry: dex[key] };
+    const e = Object.values(dex).find((x) => prefixOf(x.code) === prefixOf(key));
     if (!e) return { type: 'new' };
-    if (e.lots.includes(code)) return { type: 'lotUsed', entry: e };
+    if (e.lots.includes(key)) return { type: 'lotUsed', entry: e };
     if (e.maxLv >= BB.MAX_LV) return { type: 'lotMax', entry: e };
     return { type: 'lot', entry: e };
   }
@@ -119,11 +119,12 @@
       if (dex[d.code]) return;
       dex[d.code] = { code: d.code, idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit,
         xp: 0, level: 1, maxLv: d.limit, lots: [], wins: 0, losses: 0 };
-      if (d.collab) { dex[d.code].collab = true; BB.addCollabCode(d.code); }
+      if (d.collab) dex[d.code].collab = true;
       await Store.saveFighter(cur, dex[d.code]);
     } else if (st.type === 'lot') {
-      if (st.entry.lots.includes(s.code)) return;
-      st.entry.lots.push(s.code);
+      const key = s.collab ? 'c' + s.code : s.code;
+      if (st.entry.lots.includes(key)) return;
+      st.entry.lots.push(key);
       st.entry.maxLv = BB.maxLevelOf(st.entry.limit, st.entry.lots.length);
       await Store.saveFighter(cur, st.entry);
     }
@@ -163,7 +164,7 @@
   function setSlot(kind, code, collab) {
     const s = slots[kind];
     const cap = kind === 'char' ? 'Char' : 'Item';
-    s.code = code.replace(/\D/g, '');
+    s.code = code.replace(/\D/g, ''); s.collab = !!collab;
     $('in' + cap).value = s.code;
     s.dec = null;
     s.status = null;
@@ -213,7 +214,7 @@
     const e = dex[s.dec.code] || st.entry;
     const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（限界Lv${e.maxLv}）`
       : `🎁 同じシールの別ロット！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
-    setSlot('char', s.code);
+    setSlot('char', s.code, collab);
     $('iChar').textContent = msg;
   }
   $('inChar').addEventListener('input', (e) => setSlot('char', e.target.value));
@@ -282,8 +283,8 @@
     $('libList').innerHTML = l.length ? '' : '<p class="small">まだ戦士がいません。バーコードを読み取ると図鑑に載ります</p>';
     l.forEach((e) => {
       const b = document.createElement('button');
-      b.textContent = `${BB.ATTRS[e.attr].emoji} ${e.name}  Lv${e.level}/${e.maxLv}  ${e.wins}勝${e.losses}敗  (${e.code})`;
-      b.onclick = () => { setSlot('char', e.code); $('libMask').classList.remove('on'); };
+      b.textContent = `${BB.ATTRS[e.attr].emoji} ${e.name}  Lv${e.level}/${e.maxLv}  ${e.wins}勝${e.losses}敗  (${e.code.replace(/^c/, "🌟")})`;
+      b.onclick = () => { setSlot('char', e.code, e.code[0] === 'c'); $('libMask').classList.remove('on'); };
       $('libList').appendChild(b);
     });
     $('libMask').classList.add('on');
