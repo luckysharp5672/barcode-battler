@@ -34,10 +34,17 @@
     return null;
   }
   // 同じシール（キャラ・キラキラ・属性が同じ）を表すキー。45と49は同じ扱い。戦士は ⑤〜⑨ の5桁で決まるので、③④は見ない
-  function identityKey(code) {
+  function identityKey(code, collab) {
     const s = String(code);
-    return prefixKind(s) === 'char' ? '4x' + s.slice(4, 9) : s.slice(0, 7);
+    return prefixKind(s) === 'char' ? (collab || COLLAB.codes.has(s) ? 'cx' : '4x') + s.slice(4, 9) : s.slice(0, 7);
   }
+  // コラボキャラ（合言葉つきの collab.bin を collab.js が読んで setCollab に渡す）。
+  // 同じ⑤〜⑨でも、通常のシールとは別のシール。コラボで手に入れたコードは COLLAB.codes に入る
+  const COLLAB = { chars: [], map: [], codes: new Set(), ready: false };
+  function setCollab(b) { COLLAB.chars = b.chars; COLLAB.map = b.map; COLLAB.ready = true; }
+  function setCollabCodes(list) { COLLAB.codes = new Set(list); }
+  function addCollabCode(code) { COLLAB.codes.add(String(code)); }
+  const NO_COLLAB = { id: 'collab-x', name: '？', breed: '犬', role: '', type: '', init: { hp: 40, st: 40, df: 40, dx: 40, sp: 40 }, growth: { hp: 4, st: 4, df: 4, dx: 3, sp: 3 } };
 
   // ⑤⑥（00〜99）→ キラキラの種類（限界レベルを表す）
   function kirakiraOf(n) {
@@ -67,12 +74,18 @@
   // バーコード → 戦士（シール）／アイテム
   //   戦士(45/49): ⑤⑥=キャラ(00〜99)、⑦⑧=キラキラ(00〜99)、⑨=属性(% 5)。③④は使わない
   //   アイテム(9784): ⑤⑥⑦=000〜999 → 番号 % 68
-  function decode(code) {
+  function decode(code, collab) {
     if (!isValidJan(code)) return null;
     const kind = prefixKind(code);
     if (!kind) return null;
     const s = String(code), g = (n) => +s[n - 1];
     const base = { code: s, prefix: identityKey(s), kind };
+    if (kind === 'char' && (collab || COLLAB.codes.has(s))) {
+      if (!COLLAB.ready) return null;                 // 合言葉がまだ（この端末では見えない）
+      const ci = COLLAB.map[g(5) * 10 + g(6)], c = COLLAB.chars[ci], kk = kirakiraOf(g(7) * 10 + g(8));
+      return { ...base, prefix: identityKey(s, true), idx: 100 + ci, id: 'collab-' + ci, name: c.name, breed: '犬', role: c.role, type: c.type, init: c.init, growth: c.growth,
+        attr: g(9) % 5, kirakira: kk, limit: kk.limit, kk: g(7) * 10 + g(8), collab: true };
+    }
     if (kind === 'char') {
       const idx = g(5) * 10 + g(6), c = DATA.chars[idx], kk = kirakiraOf(g(7) * 10 + g(8));
       return { ...base, idx, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth,
@@ -274,7 +287,7 @@
   // ---- 通信対戦：シールの情報だけで、同じ戦士を両方の端末で作り直す ----
   // 戦士の「仕様」：{ idx(キャラ), kk(キラキラ0〜99), attr(属性), level, item(アイテムID/null) }。バーコードそのものは送らない
   function stickerDec(idx, kk, attr) {
-    const c = DATA.chars[idx], k = kirakiraOf(kk);
+    const c = idx >= 100 ? (COLLAB.chars[idx - 100] || NO_COLLAB) : DATA.chars[idx], k = kirakiraOf(kk);
     return { code: '', prefix: '', kind: 'char', idx, kk, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth, attr, kirakira: k, limit: k.limit };
   }
   const specOf = (f) => ({ idx: f.idx, kk: f.kk, attr: f.attr, level: f.level, item: f.item ? f.item.itemId : null });
@@ -284,7 +297,7 @@
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA,
+    healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA, COLLAB, setCollab, setCollabCodes, addCollabCode,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BB = api;

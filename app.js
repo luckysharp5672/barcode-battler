@@ -28,7 +28,7 @@
     const [bg, fx, ch] = await Promise.all([
       loadImg(`assets/kirakira/${dec.kirakira.key}.webp`),
       loadImg(`assets/effects/${BB.ATTRS[dec.attr].key}.png`),
-      loadImg(`assets/chars/${String(dec.idx).padStart(2, '0')}.webp`),
+      loadImg(dec.idx >= 100 && BB.COLLAB.chars[dec.idx - 100] ? BB.COLLAB.chars[dec.idx - 100].img : `assets/chars/${String(dec.idx).padStart(2, '0')}.webp`),
     ]);
     if (bg) ctx.drawImage(bg, 0, 0, size, size);
     if (fx) ctx.drawImage(fx, 0, 0, size, size);
@@ -59,6 +59,7 @@
     daily = await Store.getDaily(cur);
     player = await Store.getPlayer(cur);
     updateRandButtons(); renderWallet(); applyLook();
+    BB.setCollabCodes(Object.values(dex).filter((e) => e.collab).map((e) => e.code));   // コラボの戦士のコード（合言葉が未入力の端末では、見えないだけ）
     // 現在のルールで無効なデータは表示しない（保存データは消さない）。名前・限界は最新のデータに合わせる
     Object.keys(dex).forEach((c) => {
       const d = BB.decode(c);
@@ -72,7 +73,7 @@
     // 45と49で同じ戦士になった重複は、経験値が多い方を残す
     const seen = {};
     Object.values(dex).forEach((e) => {
-      const k = BB.identityKey(e.code), o = seen[k];
+      const k = BB.identityKey(e.code, e.collab), o = seen[k];
       if (!o) { seen[k] = e; return; }
       const keep = e.xp > o.xp ? e : o;
       delete dex[(keep === e ? o : e).code]; seen[k] = keep;
@@ -100,11 +101,11 @@
     renderCloud();
   };
   // 同じシール = キャラ(⑤⑥)・キラキラ(⑦⑧)・属性(⑨)が同じ（45と49は同じ扱い、③④は見ない）。1つのシールにつき戦士は1体だけ
-  const prefixOf = (code) => BB.identityKey(code);
+  const prefixOf = (code, collab) => BB.identityKey(code, collab);
   // バーコードの扱いを判定する（図鑑は変更しない）
-  function lookup(code) {
+  function lookup(code, collab) {
     if (dex[code]) return { type: 'known', entry: dex[code] };
-    const e = Object.values(dex).find((x) => prefixOf(x.code) === prefixOf(code));
+    const e = Object.values(dex).find((x) => prefixOf(x.code, x.collab) === prefixOf(code, collab));
     if (!e) return { type: 'new' };
     if (e.lots.includes(code)) return { type: 'lotUsed', entry: e };
     if (e.maxLv >= BB.MAX_LV) return { type: 'lotMax', entry: e };
@@ -118,6 +119,7 @@
       if (dex[d.code]) return;
       dex[d.code] = { code: d.code, idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit,
         xp: 0, level: 1, maxLv: d.limit, lots: [], wins: 0, losses: 0 };
+      if (d.collab) { dex[d.code].collab = true; BB.addCollabCode(d.code); }
       await Store.saveFighter(cur, dex[d.code]);
     } else if (st.type === 'lot') {
       if (st.entry.lots.includes(s.code)) return;
@@ -158,7 +160,7 @@
   }
 
   // ---------- ホーム ----------
-  function setSlot(kind, code) {
+  function setSlot(kind, code, collab) {
     const s = slots[kind];
     const cap = kind === 'char' ? 'Char' : 'Item';
     s.code = code.replace(/\D/g, '');
@@ -175,8 +177,8 @@
     } else if (s.code.length === 13 && !BB.prefixKind(s.code)) {
       $('w' + cap).textContent = '先頭が45・49の商品か、9784の書籍のバーコードだけ使えます';
     } else if (s.code.length === 13) {
-      const d = BB.decode(s.code);
-      const st = kind === 'char' ? lookup(s.code) : null;
+      const d = BB.decode(s.code, kind === 'char' && collab);
+      const st = kind === 'char' ? lookup(s.code, collab) : null;
       if (kind === 'char' && d.kind !== 'char') $('w' + cap).textContent = 'これは書籍（アイテム用）です。先頭が45か49の商品を入れてください';
       else if (kind === 'item' && d.kind !== 'item') $('w' + cap).textContent = 'これは商品（戦士用）です。先頭が9784の書籍を入れてください';
       else if (kind === 'char') {
@@ -194,8 +196,8 @@
     if (preview) makeSticker(preview).then((c) => { const box = $('stk' + cap); if (box && s.dec === preview) box.appendChild(c); });
   }
   // 戦士を手に入れた（スキャン・ランダム・入力の確定）ときに、すぐ図鑑へ登録する／別ロットなら限界Lvを上げる
-  async function acquire(kind, code) {
-    setSlot(kind, code);
+  async function acquire(kind, code, collab) {
+    setSlot(kind, code, collab);
     const s = slots[kind];
     if (kind === 'item') { // 書籍：持ち物に入れる（同じバーコードは1回だけ）
       if (!s.dec) return;
@@ -257,6 +259,22 @@
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
   document.querySelectorAll('[data-scan]').forEach((b) => b.onclick = () => openScan(b.dataset.scan));
+  // ---- コラボスキャン：合言葉で開く「コラボキャラ」。読み取りのルールは、通常のスキャンと同じ ----
+  async function ensureCollab() {
+    if (BB.COLLAB.ready) return true;
+    const pass = (window.prompt('コラボの合言葉を入れてください（家族に聞いてね）', '') || '').trim();
+    if (!pass) return false;
+    const r = await Collab.unlock(pass);
+    if (r === 'ok') { await loadProfiles(); return true; }
+    await choose('コラボを開けませんでした', [{ label: r === 'wrong' ? '合言葉がちがいます' : r === 'missing' ? 'コラボのデータが、まだ置かれていません' : 'この端末・ブラウザでは、コラボを読み込めませんでした（HTTPSが必要です）', value: 0, disabled: true }, { label: 'とじる', value: 0 }]);
+    return false;
+  }
+  $('btnCollab').onclick = async () => { if (await ensureCollab()) openScan('char', true); };
+  $('btnCollabNum').onclick = async () => {
+    if (!(await ensureCollab())) return;
+    const v = (window.prompt('コラボで読み取るバーコードの数字（13桁）', '') || '').replace(/\D/g, '');
+    if (v) await acquire('char', v, true);
+  };
 
   // 図鑑
   function openLib() {
@@ -286,7 +304,7 @@
   }
   // 読み取りの方針：BarcodeDetector と ZXing の両方を使い、映像の「中央の帯」→「全体」…と、毎回ちがう切り出しで試す。
   // カメラは高解像度・連続ピント。ライト・ズーム（対応端末のみ）と、写真から読み取る方法も用意している
-  let detector = null, track = null, scanKind = 'char';
+  let detector = null, track = null, scanKind = 'char', scanCollab = false;
   function makeReader() {
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.EAN_13]);
@@ -326,7 +344,7 @@
       if (v.videoWidth) {
         const [rx, ry, rw, rh, rot] = REGIONS[n % REGIONS.length]; n++;
         const raw = await decodeRegion(v, v.videoWidth, v.videoHeight, rx, ry, rw, rh, reader, cv, ctx, rot);
-        if (raw && scanning) { closeScan(); acquire(kind, raw); return; }
+        if (raw && scanning) { closeScan(); acquire(kind, raw, scanCollab); return; }
         if (Date.now() - since > 12000) { since = Date.now(); $('scanMsg').textContent = 'うまく読めないときは：明るくする／ライトをつける／少し離す（10〜20cm）／下の「写真で読む」をためす'; }
       }
       await sleep(60);
@@ -345,14 +363,14 @@
       const tries = [[0, 0, 1, 1, false], [0.04, 0.3, 0.92, 0.4, false], [0.02, 0.18, 0.96, 0.64, false], [0, 0, 1, 1, true], [0.3, 0.04, 0.4, 0.92, true], [0.1, 0.1, 0.8, 0.8, false], [0, 0.25, 1, 0.5, false], [0, 0.4, 1, 0.3, false]];
       for (const [rx, ry, rw, rh, rot] of tries) {
         const raw = await decodeRegion(img, W, H, rx, ry, rw, rh, reader, cv, ctx, rot);
-        if (raw) { URL.revokeObjectURL(url); closeScan(); acquire(kind, raw); return; }
+        if (raw) { URL.revokeObjectURL(url); closeScan(); acquire(kind, raw, scanCollab); return; }
       }
       URL.revokeObjectURL(url);
       $('scanMsg').textContent = '写真から読み取れませんでした。バーコード全体が大きく写り、ピントが合うように撮りなおしてください';
     } catch (e) { $('scanMsg').textContent = '写真を読めませんでした。数字を直接入力してください'; }
   }
-  async function openScan(kind) {
-    scanKind = kind;
+  async function openScan(kind, collab) {
+    scanKind = kind; scanCollab = !!collab;
     $('scanMask').classList.add('on');
     $('scanMsg').textContent = ''; $('scanTools').style.display = 'none';
     try {
@@ -556,7 +574,7 @@
   }
   // キャラの「とくちょう」と「ものがたり」（stories.js）
   function storyHtml(f) {
-    const s = (typeof BB_STORIES !== 'undefined' ? BB_STORIES : {})[String(f.idx).padStart(2, '0')] || null;
+    const s = f.idx >= 100 ? ((BB.COLLAB.chars[f.idx - 100] || {}).story || null) : ((typeof BB_STORIES !== 'undefined' ? BB_STORIES : {})[String(f.idx).padStart(2, '0')] || null);
     return s ? `<h3>とくちょう</h3><p class="story">${s[0]}</p><h3>ものがたり</h3><p class="story">${s[1]}</p>` : '';
   }
   function fillDetail(box, f, foeAttrs, opts) {
@@ -1714,7 +1732,7 @@
     ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体は全部、控えの3体は7割）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
-    ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。<br>
+    ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。「🌟 コラボスキャン」は、合言葉を知っている家族だけの特別なキャラです（読み取りのルールは、ふつうのスキャンと同じ）。<br>
     ・「🌐 家族対戦」：家族クラウドにつないでいるユーザー同士で、それぞれの端末で対戦できます。部屋を作る／待っている部屋に入る／部屋コードで入る。毎ターンの入力は45秒、時間切れは自動で「たたかう」。「あきらめる」はあいての勝ち。<br>
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
     ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（1日600XPまで）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
@@ -1723,7 +1741,7 @@
 
   if (window.Cloud) Cloud.onStatus = renderCloud;
   renderCloud();   // まず表示する（このあとの読み込みで何かあっても、家族クラウドのボタンは出す）
-  loadProfiles().then(() => {
+  (window.Collab ? Collab.tryStored() : Promise.resolve()).catch(() => {}).then(() => loadProfiles()).then(() => {
     renderCloud();
     if (window.Cloud) Cloud.init(() => loadProfiles());   // つながっていれば、起動時に同期（新しいデータがあれば取り込む）
   }).catch((e) => { renderCloud(); if (window.__showErr) __showErr('読み込み：' + (e && (e.message || e))); });
