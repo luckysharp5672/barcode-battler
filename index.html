@@ -159,6 +159,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 .filebtn{flex:1;text-align:center;cursor:pointer;padding:10px;border-radius:10px;background:var(--panel);border:1px solid var(--line)}
 .mbars{margin-top:4px;display:grid;gap:2px}.mb{display:flex;align-items:center;gap:4px;font-size:12px}.mb span{width:18px;text-align:center}.mb i{flex:1;height:6px;background:#0d1117;border-radius:3px;overflow:hidden}.mb u{display:block;height:100%;background:var(--me);border-radius:3px}.mb b{width:30px;text-align:right;font-size:12px}.mb em{font-style:normal;font-size:11px;width:32px;text-align:left}.mb em.up{color:#3fb950}.mb em.dn{color:#f85149}.mb i{position:relative}.mb s{position:absolute;top:0;height:100%;background:#3fb950;opacity:.9}.story{margin:2px 0 6px;font-size:14px;line-height:1.7}
 .ringref{cursor:pointer;flex:none;line-height:0}.btop{display:flex;align-items:center;gap:8px;margin-bottom:6px}.btop .starline{flex:1;text-align:left;margin:0}
+.mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.mcard{position:relative;margin:0;padding:8px;display:flex;flex-direction:column;gap:6px}.mcard.dead{opacity:.4}.mcard.acting{outline:2px solid var(--acc)}.mstk{width:88px;height:88px;align-self:center;border-radius:10px;overflow:hidden;background:#0d1117}.mstk canvas{width:100%;height:100%;display:block}.minfo .top{display:flex;justify-content:space-between;font-size:13px}.mbench{margin:2px 0 6px}
 </style>
 </head>
 <body>
@@ -205,6 +206,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <button id="btnParty">👥 パーティ編成</button>
     <button class="pri" id="btnBattle">⚔ シングル（1本）</button>
     <button class="pri" id="btnBo3">🏆 3本勝負</button>
+    <button class="pri" id="btnMulti">👥 マルチ（2対2）</button>
   </div>
   <div class="row"><button id="btnShop">🏪 お店</button><button id="btnPvp">🌐 家族対戦</button><button id="btnHelp">📖 あそびかた</button></div>
 
@@ -214,7 +216,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10250852</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10251119</div>
 </section>
 
 <!-- お店 -->
@@ -304,6 +306,17 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   <div class="acts" id="acts"></div>
 </section>
 
+<!-- マルチバトル（場に2体） -->
+<section id="battle2" class="screen">
+  <div class="btop"><div class="starline" id="starLine2"></div><div class="ringref" data-attrring="64" title="属性の相性（タップで大きく）"></div></div>
+  <div id="timeline2"></div>
+  <div class="mrow" id="mFoe"></div>
+  <div class="small mbench" id="mFoeBench"></div>
+  <div class="log" id="log2"></div>
+  <div class="mrow" id="mMe"></div>
+  <div class="small mbench" id="mMeBench"></div>
+</section>
+
 <!-- 結果 -->
 <section id="result" class="screen">
   <div class="big" id="resEmo"></div>
@@ -350,12 +363,13 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10250852"></script>
-<script src="stories.js?v=10250852"></script>
-<script src="engine.js?v=10250852"></script>
-<script src="battle.js?v=10250852"></script>
-<script src="store.js?v=10250852"></script>
-<script src="cloud.js?v=10250852"></script>
-<script src="app.js?v=10250852"></script>
+<script src="data.js?v=10251119"></script>
+<script src="stories.js?v=10251119"></script>
+<script src="engine.js?v=10251119"></script>
+<script src="battle.js?v=10251119"></script>
+<script src="multi.js?v=10251119"></script>
+<script src="store.js?v=10251119"></script>
+<script src="cloud.js?v=10251119"></script>
+<script src="app.js?v=10251119"></script>
 </body>
 </html>
