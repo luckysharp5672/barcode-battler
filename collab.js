@@ -10,6 +10,7 @@
   }
   // 戻り値：'ok' | 'wrong'（合言葉がちがう）| 'missing'（ファイルがない）| 'error'
   async function unlock(pass) {
+    pass = String(pass || '').normalize('NFKC').trim();   // 入力のしかたで文字の形がずれないように
     if (!pass || !root.crypto || !crypto.subtle) return 'error';
     let buf;
     try {
