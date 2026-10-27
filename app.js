@@ -486,7 +486,8 @@
   function statsWithItem(e, itemId) {
     const f = (item) => { const m = BB.makeFighter(BB.decode(e.code), item, e.level); return { hp: m.maxHp / BB.HP_SCALE, st: m.st, df: m.df, dx: m.dx, sp: m.sp }; };
     const base = f(null), cur = itemId ? f(BB.itemById(itemId)) : base;
-    return { base, cur, total: Object.values(cur).reduce((x, y) => x + Math.round(y), 0) };
+    const sum = (o) => Object.values(o).reduce((s, y) => s + Math.round(y), 0);
+    return { base, cur, total: sum(base), delta: sum(cur) - sum(base) };
   }
   // バー：横いっぱい＝333。0〜333 青 → 334〜666 黄 → 667〜999 赤（色が変わるたびに、前の色の上にかさねる）
   function miniBars(e, itemId) {
@@ -506,7 +507,7 @@
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
     const info = document.createElement('div'); info.className = 'pinfo';
-    info.innerHTML = `<div><span class="tot">合計${statsWithItem(e, inParty ? player.party.items[e.code] : null).total}</span> <b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
+    info.innerHTML = `<div>${(() => { const t = statsWithItem(e, inParty ? player.party.items[e.code] : null); return `<span class="tot">合計${t.total}${t.delta ? `<em class="${t.delta > 0 ? 'up' : 'dn'}">${t.delta > 0 ? '＋' : '－'}${Math.abs(t.delta)}</em>` : ''}</span>`; })()} <b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
     row.appendChild(info);
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
