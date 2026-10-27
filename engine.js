@@ -35,11 +35,12 @@
   }
   // 同じシール（キャラ・キラキラ・属性が同じ）を表すキー。45と49は同じ扱い。戦士は ⑤〜⑨ の5桁で決まるので、③④は見ない
   // コラボの戦士の図鑑キーは 'c' + 13桁（通常のスキャンで使ったバーコードとは、別の枠になる）
+  // 戦士は「キャラ(⑤⑥)＋属性(⑨)」が同じなら同じ戦士（キラキラ⑦⑧はちがってもよい）
   function identityKey(code, collab) {
     let s = String(code);
     const c = collab || s[0] === 'c';
     if (s[0] === 'c') s = s.slice(1);
-    return prefixKind(s) === 'char' ? (c ? 'cx' : '4x') + s.slice(4, 9) : s.slice(0, 7);
+    return prefixKind(s) === 'char' ? (c ? 'cx' : '4x') + s.slice(4, 6) + s[8] : s.slice(0, 7);
   }
   // コラボキャラ（合言葉つきの collab.bin を collab.js が読んで setCollab に渡す）。
   // 同じ⑤〜⑨でも、通常のシールとは別のシール
@@ -50,9 +51,19 @@
   const NO_COLLAB = { id: 'collab-x', name: '？', breed: '犬', role: '', type: '', init: { hp: 40, st: 40, df: 40, dx: 40, sp: 40 }, growth: { hp: 4, st: 4, df: 4, dx: 3, sp: 3 } };
 
   // ⑤⑥（00〜99）→ キラキラの種類（限界レベルを表す）
+  // キラキラ（弱い順）：始まりのレベル・能力の倍率[いちばん高い能力, 2番目に高い能力]・限界レベル。⑦⑧(00〜99)の範囲が from
+  const KK = [
+    { key: 'basic', from: 0, startLv: 1, mult: [1, 1], limit: 10 },
+    { key: 'ex', from: 25, startLv: 10, mult: [1.2, 1], limit: 30 },
+    { key: 'rare', from: 50, startLv: 20, mult: [1.4, 1.2], limit: 50 },
+    { key: 'superrare', from: 70, startLv: 30, mult: [1.6, 1.4], limit: 70 },
+    { key: 'halloween', from: 85, startLv: 40, mult: [1.8, 1.6], limit: 90 },
+    { key: 'legend', from: 95, startLv: 50, mult: [2.0, 1.8], limit: 99 },
+  ].map((k, rank) => ({ ...k, rank, name: (DATA.kirakira.find((x) => x.key === k.key) || {}).name || k.key }));
+  const kkRank = (key) => Math.max(0, KK.findIndex((k) => k.key === key));
   function kirakiraOf(n) {
-    let k = DATA.kirakira[0];
-    for (const x of DATA.kirakira) if (n >= x.from) k = x;
+    let k = KK[0];
+    for (const x of KK) if (n >= x.from) k = x;
     return k;
   }
 
@@ -123,9 +134,9 @@
   }
 
   // ---- 育成 ----
-  const MAX_LV = 60;
-  // 最初の限界レベル＝キラキラの値（ベーシック10〜レジェンド60）。同じシールの別ロットのバーコードで+5ずつ、最大Lv60まで
-  const LOT_STEP = 5;
+  const MAX_LV = 99;
+  // 最初の限界レベルはキラキラで決まる（ベーシック10〜レジェンド99）。同じキャラ・同じ属性で、同等か下位のキラキラを読むと +10、上位なら上書き
+  const LOT_STEP = 10;
   const xpForLevel = (lv) => (25 * (lv - 1) * lv) / 2;
   function levelFromXp(xp, maxLv) {
     const cap = Math.min(MAX_LV, maxLv || MAX_LV);
@@ -137,7 +148,12 @@
   // レベルごとの能力（最大999）
   function statsAt(dec, lv) {
     const o = {};
-    for (const k of ['hp', 'st', 'df', 'dx', 'sp']) o[k] = Math.min(999, dec.init[k] + dec.growth[k] * (lv - 1));
+    const keys = ['hp', 'st', 'df', 'dx', 'sp'];
+    const order = keys.slice().sort((a, b) => dec.init[b] - dec.init[a]);   // 初期能力の大きい順（同じなら hp,st,df,dx,sp の順）
+    const m = (dec.kirakira && dec.kirakira.mult) || [1, 1];
+    for (const k of keys) o[k] = dec.init[k] + dec.growth[k] * (lv - 1);
+    o[order[0]] *= m[0]; o[order[1]] *= m[1];
+    for (const k of keys) o[k] = Math.min(999, Math.round(o[k]));
     return o;
   }
 
@@ -298,7 +314,7 @@
   const fighterFromSpec = (sp) => makeFighter(stickerDec(sp.idx, sp.kk, sp.attr), sp.item ? itemById(sp.item) : null, sp.level);
 
   const api = {
-    ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, decode, describeItem, randomCode, barBits,
+    ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, kkRank, KK, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
     healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA, COLLAB, setCollab, setCollabCodes, addCollabCode,

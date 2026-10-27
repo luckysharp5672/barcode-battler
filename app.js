@@ -66,7 +66,8 @@
       const e = dex[c];
       Object.assign(e, { idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit });
       e.lots = e.lots || []; e.xp = e.xp || 0; e.wins = e.wins || 0; e.losses = e.losses || 0;
-      e.maxLv = BB.maxLevelOf(d.limit, e.lots.length);
+      if (e.bonus === undefined) e.bonus = e.lots.length;       // 限界レベルを上げた回数（1回で+10）
+      e.maxLv = BB.maxLevelOf(d.limit, e.bonus);
       e.level = Math.min(e.level || 1, e.maxLv);
     });
     // 45と49で同じ戦士になった重複は、経験値が多い方を残す
@@ -74,8 +75,12 @@
     Object.values(dex).forEach((e) => {
       const k = BB.identityKey(e.code), o = seen[k];
       if (!o) { seen[k] = e; return; }
-      const keep = e.xp > o.xp ? e : o;
-      delete dex[(keep === e ? o : e).code]; seen[k] = keep;
+      // 同じキャラ・同じ属性が2体いたら、上位のキラキラ（同じなら経験値の多い方）を残す
+      const better = (BB.kkRank(e.kirakira) - BB.kkRank(o.kirakira)) || (e.xp - o.xp);
+      const keep = better > 0 ? e : o, drop = keep === e ? o : e;
+      keep.lots = [...new Set([...keep.lots, ...drop.lots, drop.code])]; keep.bonus = (keep.bonus || 0) + (drop.bonus || 0);
+      keep.maxLv = BB.maxLevelOf(keep.limit, keep.bonus); keep.level = Math.min(Math.max(keep.level, drop.level), keep.maxLv); keep.xp = Math.max(keep.xp, drop.xp);
+      delete dex[drop.code]; seen[k] = keep; Store.removeFighter(cur, drop.code); Store.saveFighter(cur, keep);
     });
     cleanParty();
     setSlot('char', ''); setSlot('item', '');
@@ -108,32 +113,50 @@
     const e = Object.values(dex).find((x) => prefixOf(x.code) === prefixOf(key));
     if (!e) return { type: 'new' };
     if (e.lots.includes(key)) return { type: 'lotUsed', entry: e };
+    const nd = BB.decode(key);
+    if (nd && nd.kirakira.rank > BB.kkRank(e.kirakira)) return { type: 'upgrade', entry: e };   // 上位のキラキラ：上書き
     if (e.maxLv >= BB.MAX_LV) return { type: 'lotMax', entry: e };
-    return { type: 'lot', entry: e };
+    return { type: 'lot', entry: e };                                                          // 同等か下位：限界Lv+10
   }
-  // 確定：新規登録 or 別ロットで限界Lv+5（最大Lv60まで）
+  // 確定：新規登録 / 上位のキラキラなら上書き / 同等・下位なら限界Lv+10（最大Lv99まで）
   async function commitChar() {
     const s = slots.char, st = s.status;
     if (st.type === 'new') {
       const d = s.dec;
       if (dex[d.code]) return;
       dex[d.code] = { code: d.code, idx: d.idx, name: d.name, attr: d.attr, kirakira: d.kirakira.key, limit: d.limit,
-        xp: 0, level: 1, maxLv: d.limit, lots: [], wins: 0, losses: 0 };
+        xp: BB.xpForLevel(d.kirakira.startLv), level: d.kirakira.startLv, maxLv: d.limit, lots: [], bonus: 0, wins: 0, losses: 0 };
       if (d.collab) dex[d.code].collab = true;
       await Store.saveFighter(cur, dex[d.code]);
     } else if (st.type === 'lot') {
-      const key = s.collab ? 'c' + s.code : s.code;
-      if (st.entry.lots.includes(key)) return;
-      st.entry.lots.push(key);
-      st.entry.maxLv = BB.maxLevelOf(st.entry.limit, st.entry.lots.length);
-      await Store.saveFighter(cur, st.entry);
+      const key = s.collab ? 'c' + s.code : s.code, E = st.entry;
+      if (E.lots.includes(key)) return;
+      if (E.bonus === undefined) E.bonus = E.lots.length;
+      E.lots.push(key); E.bonus++;
+      E.maxLv = BB.maxLevelOf(E.limit, E.bonus);
+      await Store.saveFighter(cur, E);
+    } else if (st.type === 'upgrade') {
+      // 上位のキラキラに上書き：バーコードが新しいものに変わる。レベル・経験値・勝敗・限界アップの回数は引きつぐ
+      const d = s.dec, E = st.entry, old = E.code;
+      if (E.bonus === undefined) E.bonus = E.lots.length;
+      delete dex[old]; await Store.removeFighter(cur, old);
+      E.lots = [...new Set([...E.lots, old])];
+      Object.assign(E, { code: d.code, kirakira: d.kirakira.key, limit: d.limit });
+      E.maxLv = BB.maxLevelOf(d.limit, E.bonus);
+      E.xp = Math.max(E.xp, BB.xpForLevel(d.kirakira.startLv)); E.level = Math.min(Math.max(E.level, d.kirakira.startLv), E.maxLv);
+      dex[d.code] = E;
+      const p = player.party;
+      p.members = p.members.map((c) => (c === old ? d.code : c));
+      if (p.items[old]) { p.items[d.code] = p.items[old]; delete p.items[old]; }
+      await Store.saveFighter(cur, E); await savePlayer();
     }
   }
   function statusText(st) {
     switch (st.type) {
       case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${slots.char.dec ? slots.char.dec.limit : ''}）`;
       case 'known': return '';
-      case 'lot': return `🎁 同じシールの別ロット！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, st.entry.lots.length + 1)}（入力を確定すると反映されます）`;
+      case 'lot': return `🎁 同じキャラ・同じ属性！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, (st.entry.bonus || 0) + 1)}（入力を確定すると反映されます）`;
+      case 'upgrade': return `✨ 上位のキラキラです！ ${st.entry.name} が ${slots.char.dec ? slots.char.dec.kirakira.name : ''} に上書きされます（入力を確定すると反映されます）`;
       case 'lotUsed': return `このバーコードは使用済みです。${st.entry.name} を呼び出しました`;
       case 'lotMax': return `${st.entry.name} はすでに最大の限界Lv${BB.MAX_LV}です`;
     }
@@ -153,7 +176,7 @@
       return `<div class="stkwrap" id="stk${cap}"></div>
         <div class="nm">${A.emoji} ${d.name} <span class="small">${d.role}</span></div>
         <span class="tag">${A.name}属性</span><span class="tag">✨${d.kirakira.name}</span><span class="tag">${d.type}</span>
-        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}は最初から限界Lv${d.limit}。別ロットで+5、最大Lv${BB.MAX_LV}）</div>
+        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}：Lv${d.kirakira.startLv}から・能力 ${d.kirakira.mult[0] > 1 ? '最大×' + d.kirakira.mult[0] : '×1.0'}。同じキャラ・属性の同等/下位で+10、上位なら上書き、最大Lv${BB.MAX_LV}）</div>
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
@@ -184,7 +207,7 @@
       else if (kind === 'item' && d.kind !== 'item') $('w' + cap).textContent = 'これは商品（戦士用）です。先頭が9784の書籍を入れてください';
       else if (kind === 'char') {
         s.status = st;
-        s.dec = st.entry ? BB.decode(st.entry.code) : d; // 既存の戦士がいればその戦士で戦う
+        s.dec = st.entry && st.type !== 'upgrade' ? BB.decode(st.entry.code) : d; // 既存の戦士がいればその戦士で戦う
         $('pv' + cap).innerHTML = previewHtml(s.dec, cap, st.entry);
         $('iChar').textContent = statusText(st);
         preview = s.dec;
@@ -208,12 +231,13 @@
       $('iItem').textContent = `🎁 ${s.dec.name} を持ち物に入れました！`;
       return;
     }
-    if (kind !== 'char' || !s.status || (s.status.type !== 'new' && s.status.type !== 'lot')) return;
+    if (kind !== 'char' || !s.status || !['new', 'lot', 'upgrade'].includes(s.status.type)) return;
     const st = s.status, name = s.dec.name, oldMax = st.entry ? st.entry.maxLv : 0;
     await commitChar();
     const e = dex[s.dec.code] || st.entry;
-    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（限界Lv${e.maxLv}）`
-      : `🎁 同じシールの別ロット！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
+    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（Lv${e.level}から・限界Lv${e.maxLv}）`
+      : st.type === 'upgrade' ? `✨ ${name} が ${s.dec.kirakira.name} に上書きされました！（Lv${e.level}・限界Lv${oldMax} → ${e.maxLv}）`
+      : `🎁 同じキャラ・同じ属性！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
     setSlot('char', s.code, collab);
     $('iChar').textContent = msg;
   }
@@ -558,7 +582,7 @@
       const capped = de.level >= de.maxLv;
       const base = BB.xpForLevel(de.level), need = BB.xpForLevel(de.level + 1) - base;
       const into = capped ? need : de.xp - base, pct = capped ? 100 : Math.round(into / need * 100);
-      const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（別ロットで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
+      const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（同じキャラ・属性のバーコードで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
       xpRow = `<div class="dbar"><span class="dn t">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
     }
     const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b>：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
@@ -1233,7 +1257,7 @@
       const base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
       const pct = capped ? 100 : Math.round((e.xp - base) / need * 100);
       const note = !capped ? `あと ${need - (e.xp - base)}`
-        : (e.maxLv < BB.MAX_LV ? `限界です（別ロットで限界Lv+${BB.LOT_STEP}。最大 Lv${BB.MAX_LV}）` : `最大 Lv${BB.MAX_LV}`);
+        : (e.maxLv < BB.MAX_LV ? `限界です（同じキャラ・属性のバーコードで限界Lv+${BB.LOT_STEP}。最大 Lv${BB.MAX_LV}）` : `最大 Lv${BB.MAX_LV}`);
       return `<div style="margin-bottom:8px"><div class="rt">${m.name}${m.reserve ? ' <span class="tag">控え 7割</span>' : ''} <b>+${m.gain}</b> <span class="small">Lv${e.level}　${note}</span></div>
         <div class="xpbar"><div style="width:${pct}%"></div></div>${e.level > m.oldLv ? `<div class="lvup">🎉 レベルアップ！ Lv${m.oldLv} → Lv${e.level}</div>` : ''}</div>`;
     }).join('');
@@ -1720,8 +1744,9 @@
   $('btnHome').onclick = () => { renderWallet(); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
-    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧＝限界レベル。ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）／属性（⑨）。③④は使いません。<br>
-    ・限界レベルは、キラキラで最初から決まります（ベーシック10・レア20・EX30・ハロウィン40・スーパーレア50・レジェンド60）。同じシールの別ロットのバーコードで、さらに+5ずつ（最大Lv60）。<br>
+    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧）／属性（⑨）。③④は使いません。<br>
+    ・<b>キラキラで強さが変わります</b>（弱い順）：ベーシック（Lv1から・限界Lv10）／EX（Lv10から・いちばん高い能力×1.2・限界30）／レア（Lv20から・×1.4と×1.2・限界50）／スーパーレア（Lv30から・×1.6と×1.4・限界70）／ハロウィン（Lv40から・×1.8と×1.6・限界90）／レジェンド（Lv50から・×2.0と×1.8・限界99）。能力は最大999。<br>
+    ・同じキャラ・同じ属性のバーコードを読むと、<b>上位のキラキラなら上書き</b>（レベルや経験値はそのまま）、<b>同等か下位なら限界レベル+10</b>（最大Lv99）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
     ・「👥 マルチ（2対2）」：6体から<b>4体</b>を選び、先発の<b>2体</b>が場に同時に出ます（残り2体は控え）。毎ターン、場の2体それぞれが、スキルを使うか交代するかを決め、こうげきは<b>相手の2体のどちらを狙うか</b>もえらびます。相手の2体を倒す（控えも全員倒す）と勝ち。CPUとの1本勝負で、ステージ・経験値・お金はシングルと同じです。<br>
     ・CPUとの対戦は、はじめに<b>ステージ（国名・10段階）</b>をえらびます。後ろの国ほどCPUが強く、もらえる経験値とお金も多くなります。<b>勝ってクリアすると、次の国が開きます</b>（最初は日本だけ）。<br>

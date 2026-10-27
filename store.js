@@ -38,6 +38,10 @@
     },
     // お金・持ち物・手に入れた書籍のコード・パーティ
     //   { money, bag: { アイテムID: 個数 }, itemCodes: [書籍のバーコード], party: { members: [戦士のコード], items: { 戦士のコード: アイテムID } } }
+    async removeFighter(pid, code) {
+      const d = read(); if (!d.profiles[pid] || !d.profiles[pid].dex) return;
+      delete d.profiles[pid].dex[code]; commit(d, pid);
+    },
     async getPlayer(pid) {
       const p = read().profiles[pid] || {};
       return {
