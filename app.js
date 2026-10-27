@@ -176,7 +176,7 @@
       return `<div class="stkwrap" id="stk${cap}"></div>
         <div class="nm">${A.emoji} ${d.name} <span class="small">${d.role}</span></div>
         <span class="tag">${A.name}属性</span><span class="tag">✨${d.kirakira.name}</span><span class="tag">${d.type}</span>
-        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}：Lv${d.kirakira.startLv}から・能力 ${d.kirakira.mult[0] > 1 ? '最大×' + d.kirakira.mult[0] : '×1.0'}。同じキャラ・属性の同等/下位で+10、上位なら上書き、最大Lv${BB.MAX_LV}）</div>
+        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}：Lv${d.kirakira.startLv}から・全能力 ×${d.kirakira.mult[0].toFixed(1)}。同じキャラ・属性の同等/下位で+10、上位なら上書き、最大Lv${BB.MAX_LV}）</div>
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
@@ -1756,7 +1756,7 @@
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
     ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧）／属性（⑨）。③④は使いません。<br>
-    ・<b>キラキラで強さが変わります</b>（弱い順）：ベーシック（Lv1から・限界Lv10）／EX（Lv10から・いちばん高い能力×1.2・限界30）／レア（Lv20から・×1.4と×1.2・限界50）／スーパーレア（Lv30から・×1.6と×1.4・限界70）／ハロウィン（Lv40から・×1.8と×1.6・限界90）／レジェンド（Lv50から・×2.0と×1.8・限界99）。能力は最大999。<br>
+    ・<b>キラキラで強さが変わります</b>（弱い順）：ベーシック（Lv1から・限界Lv10）／EX（Lv10から・全能力×1.1・限界30）／レア（Lv20から・×1.2・限界50）／スーパーレア（Lv30から・×1.2・限界70）／ハロウィン（Lv40から・×1.2・限界90）／レジェンド（Lv50から・×1.2・限界99）。能力は最大999。<br>
     ・同じキャラ・同じ属性のバーコードを読むと、<b>上位のキラキラなら上書き</b>（レベルや経験値はそのまま）、<b>同等か下位なら限界レベル+10</b>（最大Lv99）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
     ・「👥 マルチ（2対2）」：6体から<b>4体</b>を選び、先発の<b>2体</b>が場に同時に出ます（残り2体は控え）。毎ターン、場の2体それぞれが、スキルを使うか交代するかを決め、こうげきは<b>相手の2体のどちらを狙うか</b>もえらびます。相手の2体を倒す（控えも全員倒す）と勝ち。CPUとの1本勝負で、ステージ・経験値・お金はシングルと同じです。<br>

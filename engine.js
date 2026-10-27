@@ -51,15 +51,15 @@
   const NO_COLLAB = { id: 'collab-x', name: '？', breed: '犬', role: '', type: '', init: { hp: 40, st: 40, df: 40, dx: 40, sp: 40 }, growth: { hp: 4, st: 4, df: 4, dx: 3, sp: 3 } };
 
   // ⑤⑥（00〜99）→ キラキラの種類（限界レベルを表す）
-  // キラキラ（弱い順）：始まりのレベル・能力の倍率[いちばん高い能力, 2番目に高い能力]・限界レベル。⑦⑧(00〜99)の範囲が from
+  // キラキラ（弱い順）：始まりのレベル・能力の倍率[全能力, （予備）]・限界レベル。⑦⑧(00〜99)の範囲が from
   // ⑦⑧の出る範囲(from)は従来どおり：ベーシック0-24／レア25-49／EX50-69／ハロウィン70-84／スーパーレア85-94／レジェンド95-99
   const KK = [
     { key: 'basic', from: 0, startLv: 1, mult: [1, 1], limit: 10 },
-    { key: 'ex', from: 50, startLv: 10, mult: [1.2, 1], limit: 30 },
-    { key: 'rare', from: 25, startLv: 20, mult: [1.4, 1.2], limit: 50 },
-    { key: 'superrare', from: 85, startLv: 30, mult: [1.6, 1.4], limit: 70 },
-    { key: 'halloween', from: 70, startLv: 40, mult: [1.8, 1.6], limit: 90 },
-    { key: 'legend', from: 95, startLv: 50, mult: [2.0, 1.8], limit: 99 },
+    { key: 'ex', from: 50, startLv: 10, mult: [1.1, 1.1], limit: 30 },
+    { key: 'rare', from: 25, startLv: 20, mult: [1.2, 1.2], limit: 50 },
+    { key: 'superrare', from: 85, startLv: 30, mult: [1.2, 1.2], limit: 70 },
+    { key: 'halloween', from: 70, startLv: 40, mult: [1.2, 1.2], limit: 90 },
+    { key: 'legend', from: 95, startLv: 50, mult: [1.2, 1.2], limit: 99 },
   ].map((k, rank) => ({ ...k, rank, name: (DATA.kirakira.find((x) => x.key === k.key) || {}).name || k.key }));
   const KK_BY_FROM = KK.slice().sort((a, b) => a.from - b.from);
   const kkRank = (key) => Math.max(0, KK.findIndex((k) => k.key === key));
@@ -151,11 +151,8 @@
   function statsAt(dec, lv) {
     const o = {};
     const keys = ['hp', 'st', 'df', 'dx', 'sp'];
-    const order = keys.slice().sort((a, b) => dec.init[b] - dec.init[a]);   // 初期能力の大きい順（同じなら hp,st,df,dx,sp の順）
-    const m = (dec.kirakira && dec.kirakira.mult) || [1, 1];
-    for (const k of keys) o[k] = dec.init[k] + dec.growth[k] * (lv - 1);
-    o[order[0]] *= m[0]; o[order[1]] *= m[1];
-    for (const k of keys) o[k] = Math.min(999, Math.round(o[k]));
+    const m = (dec.kirakira && dec.kirakira.mult && dec.kirakira.mult[0]) || 1;   // キラキラの倍率を、すべての能力にかける
+    for (const k of keys) o[k] = Math.min(999, Math.round((dec.init[k] + dec.growth[k] * (lv - 1)) * m));
     return o;
   }
 
