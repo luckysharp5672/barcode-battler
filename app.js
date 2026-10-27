@@ -482,13 +482,22 @@
     }
   }
   // パーティ編成の枠の中に出す、小さなステータスバー
+  // 装備ありの能力（hp,st,df,dx,sp）と、装備による増減
+  function statsWithItem(e, itemId) {
+    const f = (item) => { const m = BB.makeFighter(BB.decode(e.code), item, e.level); return { hp: m.maxHp / BB.HP_SCALE, st: m.st, df: m.df, dx: m.dx, sp: m.sp }; };
+    const base = f(null), cur = itemId ? f(BB.itemById(itemId)) : base;
+    return { base, cur, total: Object.values(cur).reduce((x, y) => x + Math.round(y), 0) };
+  }
+  // バー：横いっぱい＝333。0〜333 青 → 334〜666 黄 → 667〜999 赤（色が変わるたびに、前の色の上にかさねる）
   function miniBars(e, itemId) {
-    const stsOf = (item) => { const f = BB.makeFighter(BB.decode(e.code), item, e.level); return { hp: f.maxHp / BB.HP_SCALE, st: f.st, df: f.df, dx: f.dx, sp: f.sp }; };
-    const base = stsOf(null), cur = itemId ? stsOf(BB.itemById(itemId)) : base;
+    const { base, cur } = statsWithItem(e, itemId);
+    const COL = ['#58a6ff', '#f0b429', '#f85149'];
     return '<div class="mbars">' + STAT_NAMES.map(([k, n]) => {
-      const d = Math.round(cur[k] - base[k]);
-      const dt = d ? `<em class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '+' : ''}${d}</em>` : '';
-      return `<div class="mb"><span>${n}</span><i><u style="width:${Math.min(100, cur[k] / 1.4)}%"></u>${d > 0 ? `<s style="left:${Math.min(100, base[k] / 1.4)}%;width:${Math.max(0, Math.min(100, cur[k] / 1.4) - Math.min(100, base[k] / 1.4))}%"></s>` : ''}</i><b>${Math.round(cur[k])}</b>${dt}</div>`;
+      const v = Math.round(cur[k]), b = Math.round(base[k]), d = v - b;
+      const tier = Math.min(2, Math.max(0, Math.ceil(v / 333) - 1));
+      const w = Math.min(100, (v - tier * 333) / 333 * 100);
+      const dt = d ? `<em class="${d > 0 ? 'up' : 'dn'}">${d > 0 ? '＋' : '－'}${Math.abs(d)}</em>` : '';
+      return `<div class="mb"><span>${n}</span><i style="${tier ? 'background:' + COL[tier - 1] : ''}"><u style="width:${w}%;background:${COL[tier]}"></u></i><b>${b}${dt}</b></div>`;
     }).join('') + '</div>';
   }
   function memberRow(e, inParty, idxs) {
@@ -497,7 +506,7 @@
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
     const info = document.createElement('div'); info.className = 'pinfo';
-    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
+    info.innerHTML = `<div><span class="tot">合計${statsWithItem(e, inParty ? player.party.items[e.code] : null).total}</span> <b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
     row.appendChild(info);
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
