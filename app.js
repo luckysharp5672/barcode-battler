@@ -507,7 +507,8 @@
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
     const info = document.createElement('div'); info.className = 'pinfo';
-    info.innerHTML = `<div>${(() => { const t = statsWithItem(e, inParty ? player.party.items[e.code] : null); return `<span class="tot">合計${t.total}${t.delta ? `<em class="${t.delta > 0 ? 'up' : 'dn'}">${t.delta > 0 ? '＋' : '－'}${Math.abs(t.delta)}</em>` : ''}</span>`; })()} <b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
+    info.innerHTML = `<div><b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}</div><div class="small">${e.wins}勝${e.losses}敗${inParty ? ` ／ 🎁 ${itemLabel(player.party.items[e.code])}` : ''}</div>${miniBars(e, inParty ? player.party.items[e.code] : null)}`;
+    row.insertAdjacentHTML('afterbegin', (() => { const t = statsWithItem(e, inParty ? player.party.items[e.code] : null); return `<span class="tot">合計${t.total}${t.delta ? `<em class="${t.delta > 0 ? 'up' : 'dn'}">${t.delta > 0 ? '＋' : '－'}${Math.abs(t.delta)}</em>` : ''}</span>`; })());
     row.appendChild(info);
     const btns = document.createElement('div'); btns.className = 'pbtns'; row.appendChild(btns);
     const mk = (label, fn, dis) => { const b = document.createElement('button'); b.textContent = label; b.disabled = !!dis; b.onclick = fn; btns.appendChild(b); };
