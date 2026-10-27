@@ -1631,17 +1631,16 @@
       });
     });
   }
-  // 🏋 修行：お金で経験値を買う（1日600XPまで。限界レベルは超えない）
+  // 🏋 修行：お金で経験値を買う（回数の上限なし。限界レベルは超えない）
   function shopTrain(box) {
-    const remain = TRAIN_DAILY_XP - player.train.xp;
-    box.insertAdjacentHTML('beforeend', `<p class="small">1XP＝${XP_PRICE}円。今日の修行ののこり <b>${remain}</b> / ${TRAIN_DAILY_XP} XP（日付が変わると戻ります）。限界レベルを超えては上がりません。</p>`);
+    box.insertAdjacentHTML('beforeend', `<p class="small">1XP＝${XP_PRICE}円。<b>回数の上限はありません</b>（お金があるだけ、何度でも）。限界レベルを超えては上がりません。</p>`);
     const list = Object.values(dex).sort((a, b) => b.level - a.level || b.xp - a.xp);
     if (!list.length) box.insertAdjacentHTML('beforeend', '<p class="small">図鑑に戦士がいません。</p>');
     list.forEach((e) => {
       const capXp = BB.xpForLevel(e.maxLv), base = BB.xpForLevel(e.level), need = BB.xpForLevel(e.level + 1) - base;
       const pct = e.level >= e.maxLv ? 100 : Math.round((e.xp - base) / need * 100);
       const A = BB.ATTRS[e.attr];
-      const gainOf = (req) => Math.max(0, Math.min(req, capXp - e.xp, remain));
+      const gainOf = (req) => Math.max(0, Math.min(req, capXp - e.xp));
       const btn = (req) => {
         const g = gainOf(req), cost = g * XP_PRICE;
         return [g > 0 ? `+${g}XP ${cost}円` : '+' + req + 'XP', async () => {
@@ -1653,7 +1652,7 @@
       srow(box, {
         thumb: (th) => makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c)),
         html: `<b>${A.emoji} ${e.name}</b> Lv${e.level}/${e.maxLv}<div class="mini"><div style="width:${pct}%"></div></div><div class="small">${e.level >= e.maxLv ? '限界です' : `経験値 ${e.xp}（Lv${e.level + 1}まで あと ${need - (e.xp - base)}）`}</div>`,
-        buttons: [btn(50), btn(200)],
+        buttons: [btn(50), btn(200), btn(1000)],
       });
     });
   }
@@ -1772,7 +1771,7 @@
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。「🌟 コラボスキャン」は、合言葉を知っている家族だけの特別なキャラです（読み取りのルールは、ふつうのスキャンと同じ）。<br>
     ・「🌐 家族対戦」：家族クラウドにつないでいるユーザー同士で、それぞれの端末で対戦できます。部屋を作る／待っている部屋に入る／部屋コードで入る。毎ターンの入力は45秒、時間切れは自動で「たたかう」。「あきらめる」はあいての勝ち。<br>
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
-    ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（1日600XPまで）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
+    ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（上限なし）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
     <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 
