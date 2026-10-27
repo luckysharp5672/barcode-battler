@@ -52,18 +52,20 @@
 
   // ⑤⑥（00〜99）→ キラキラの種類（限界レベルを表す）
   // キラキラ（弱い順）：始まりのレベル・能力の倍率[いちばん高い能力, 2番目に高い能力]・限界レベル。⑦⑧(00〜99)の範囲が from
+  // ⑦⑧の出る範囲(from)は従来どおり：ベーシック0-24／レア25-49／EX50-69／ハロウィン70-84／スーパーレア85-94／レジェンド95-99
   const KK = [
     { key: 'basic', from: 0, startLv: 1, mult: [1, 1], limit: 10 },
-    { key: 'ex', from: 25, startLv: 10, mult: [1.2, 1], limit: 30 },
-    { key: 'rare', from: 50, startLv: 20, mult: [1.4, 1.2], limit: 50 },
-    { key: 'superrare', from: 70, startLv: 30, mult: [1.6, 1.4], limit: 70 },
-    { key: 'halloween', from: 85, startLv: 40, mult: [1.8, 1.6], limit: 90 },
-    { key: 'legend', from: 95, startLv: 50, mult: [2.0, 1.8], limit: 99 },
+    { key: 'ex', from: 50, startLv: 10, mult: [1.1, 1], limit: 30 },
+    { key: 'rare', from: 25, startLv: 20, mult: [1.2, 1.1], limit: 50 },
+    { key: 'superrare', from: 85, startLv: 30, mult: [1.3, 1.2], limit: 70 },
+    { key: 'halloween', from: 70, startLv: 40, mult: [1.5, 1.4], limit: 90 },
+    { key: 'legend', from: 95, startLv: 50, mult: [1.7, 1.6], limit: 99 },
   ].map((k, rank) => ({ ...k, rank, name: (DATA.kirakira.find((x) => x.key === k.key) || {}).name || k.key }));
+  const KK_BY_FROM = KK.slice().sort((a, b) => a.from - b.from);
   const kkRank = (key) => Math.max(0, KK.findIndex((k) => k.key === key));
   function kirakiraOf(n) {
-    let k = KK[0];
-    for (const x of KK) if (n >= x.from) k = x;
+    let k = KK_BY_FROM[0];
+    for (const x of KK_BY_FROM) if (n >= x.from) k = x;
     return k;
   }
 
