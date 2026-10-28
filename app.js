@@ -151,14 +151,19 @@
       await Store.saveFighter(cur, E); await savePlayer();
     }
   }
+  // 表示用：漢字のアイテム名をひらがなに（子ども向け）
+  const ITEM_KANA = {"木の剣": "きのつるぎ", "鉄の剣": "てつのつるぎ", "鋼の剣": "はがねのつるぎ", "ミスリルの剣": "ミスリルのつるぎ", "炎の剣": "ほのおのつるぎ", "紅蓮の大剣": "ぐれんのたいけん", "水の刃": "みずのやいば", "聖剣": "せいけん", "影の刃": "かげのやいば", "樫の杖": "かしのつえ", "魔術師の杖": "まじゅつしのつえ", "賢者の杖": "けんじゃのつえ", "短弓": "たんきゅう", "長弓": "ちょうきゅう", "疾風の弓": "はやてのゆみ", "暴風の長弓": "ぼうふうのちょうきゅう", "潮騒の槍": "しおさいのやり", "雷の槍": "かみなりのやり", "大地のハンマー": "だいちのハンマー", "巨岩の大槌": "きょがんのおおづち", "麻痺のハンマー": "まひのハンマー", "紫電のダガー": "しでんのダガー", "毒のダガー": "どくのダガー", "鬼神の戦斧": "きしんのいくさおの", "革の鎧": "かわのよろい", "鎖かたびら": "くさりかたびら", "板金の鎧": "ばんきんのよろい", "竜鱗の鎧": "りゅうりんのよろい", "魔道士のローブ": "まどうしのローブ", "聖なるローブ": "せいなるローブ", "聖なるマント": "せいなるマント", "清めの鎖鎧": "きよめのくさりよろい", "炎の鎧": "ほのおのよろい", "灼熱の鎧": "しゃくねつのよろい", "水の鎧": "みずのよろい", "潮の鎧": "しおのよろい", "岩の鎧": "いわのよろい", "巨岩の鎧": "きょがんのよろい", "雷の鎧": "かみなりのよろい", "紫電の鎧": "しでんのよろい", "風の鎧": "かぜのよろい", "嵐の鎧": "あらしのよろい", "疾風の指輪": "はやてのゆびわ", "力の腕輪": "ちからのうでわ", "鍛錬の腕輪": "たんれんのうでわ", "守りの護符": "まもりのごふ", "賢者の耳飾り": "けんじゃのみみかざり", "跳躍のブーツ": "ちょうやくのブーツ", "生命のお守り": "せいめいのおまもり", "勇者の紋章": "ゆうしゃのもんしょう", "毒消しの護符": "どくけしのごふ", "目覚ましの護符": "めざましのごふ", "鉄の意志": "てつのいし", "五属性の指輪": "ごぞくせいのゆびわ", "炎の指輪": "ほのおのゆびわ", "水の指輪": "みずのゆびわ", "岩の指輪": "いわのゆびわ", "雷の指輪": "かみなりのゆびわ", "風の指輪": "かぜのゆびわ", "完全なる護り": "かんぜんなるまもり", "守護核": "しゅごかく", "万能薬": "ばんのうやく"};
+  const kanaItem = (n) => ITEM_KANA[n] || n;
+  const ATTR_JA = ['かぜ', 'つち', 'みず', 'ほのお', 'かみなり'];
+  const TYPE_JA = (t) => String(t).replace(/特殊能力/g, 'とくしゅ').replace(/攻撃/g, 'こうげき').replace(/防御/g, 'ぼうぎょ').replace(/速度/g, 'すばやさ').replace(/体力/g, 'たいりょく').replace(/特化型/g, 'とっか').replace(/型/g, 'タイプ');
   function statusText(st) {
     switch (st.type) {
-      case 'new': return `🆕 新しい戦士です（入力を確定すると図鑑に登録されます。限界Lv${slots.char.dec ? slots.char.dec.limit : ''}）`;
+      case 'new': return `🆕 あたらしいキャラです（げんかいLv${slots.char.dec ? slots.char.dec.limit : ''}）`;
       case 'known': return '';
-      case 'lot': return `🎁 同じキャラ・同じ属性！ ${st.entry.name} の限界Lv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, (st.entry.bonus || 0) + 1)}（入力を確定すると反映されます）`;
-      case 'upgrade': return `✨ 上位のキラキラです！ ${st.entry.name} が ${slots.char.dec ? slots.char.dec.kirakira.name : ''} に上書きされます（入力を確定すると反映されます）`;
-      case 'lotUsed': return `このバーコードは使用済みです。${st.entry.name} を呼び出しました`;
-      case 'lotMax': return `${st.entry.name} はすでに最大の限界Lv${BB.MAX_LV}です`;
+      case 'lot': return `🎁 おなじキャラ・おなじぞくせい！ ${st.entry.name} の げんかいLv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, (st.entry.bonus || 0) + 1)}`;
+      case 'upgrade': return `✨ うえのキラキラです！ ${st.entry.name} が ${slots.char.dec ? slots.char.dec.kirakira.name : ''} に なります`;
+      case 'lotUsed': return `このバーコードは しようずみです。${st.entry.name} を よびだしました`;
+      case 'lotMax': return `${st.entry.name} は もう いちばんうえの げんかいLv${BB.MAX_LV}です`;
     }
   }
 
@@ -174,13 +179,13 @@
     if (d.kind === 'char') {
       const A = BB.ATTRS[d.attr], lv = entry ? entry.level : 1, mx = entry ? entry.maxLv : d.limit;
       return `<div class="stkwrap" id="stk${cap}"></div>
-        <div class="nm">${A.emoji} ${d.name} <span class="small">${d.role}</span></div>
-        <span class="tag">${A.name}属性</span><span class="tag">✨${d.kirakira.name}</span><span class="tag">${d.type}</span>
-        <div class="small" style="margin-top:6px">Lv${lv} / 限界Lv${mx}（${d.kirakira.name}：Lv${d.kirakira.startLv}から・全能力 ×${d.kirakira.mult[0].toFixed(1)}。同じキャラ・属性の同等/下位で+10、上位なら上書き、最大Lv${BB.MAX_LV}）</div>
+        <div class="nm">${A.emoji} ${d.name}</div>
+        <span class="tag">${ATTR_JA[d.attr]}ぞくせい</span><span class="tag">✨${d.kirakira.name}</span><span class="tag">${TYPE_JA(d.type)}</span>
+        <div class="small" style="margin-top:6px">Lv${lv} / げんかいLv${mx}（${d.kirakira.name}：Lv${d.kirakira.startLv}から）</div>
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
-      <div class="nm">🎁 ${d.name}</div><div class="small">${d.text}</div>${d.code ? barSvg(d.code) : '<div class="small">🎒 持ち物から（使うと1個へります）</div>'}`;
+      <div class="nm">🎁 ${kanaItem(d.name)}</div><div class="small">${d.text}</div>${d.code ? barSvg(d.code) : '<div class="small">🎒 もちものから（つかうと1こへります）</div>'}`;
   }
 
   // ---------- ホーム ----------
@@ -197,14 +202,14 @@
     $('i' + cap).textContent = '';
     let preview = null;
     if (s.code.length === 13 && !BB.isValidJan(s.code)) {
-      $('w' + cap).textContent = 'チェックデジット（末尾の数字）が合いません。JANコードではありません';
+      $('w' + cap).textContent = 'さいごの数字（チェックデジット）が あいません。JANコードではありません';
     } else if (s.code.length === 13 && !BB.prefixKind(s.code)) {
-      $('w' + cap).textContent = '先頭が45・49の商品か、9784の書籍のバーコードだけ使えます';
+      $('w' + cap).textContent = 'さいしょが45・49の しょうひんか、9784の ほんの バーコードだけ つかえます';
     } else if (s.code.length === 13) {
       const d = BB.decode(s.code, kind === 'char' && collab);
       const st = kind === 'char' ? lookup(s.code, collab) : null;
-      if (kind === 'char' && d.kind !== 'char') $('w' + cap).textContent = 'これは書籍（アイテム用）です。先頭が45か49の商品を入れてください';
-      else if (kind === 'item' && d.kind !== 'item') $('w' + cap).textContent = 'これは商品（戦士用）です。先頭が9784の書籍を入れてください';
+      if (kind === 'char' && d.kind !== 'char') $('w' + cap).textContent = 'これは ほん（アイテムよう）です。さいしょが45か49の しょうひんを いれてください';
+      else if (kind === 'item' && d.kind !== 'item') $('w' + cap).textContent = 'これは しょうひん（キャラよう）です。さいしょが9784の ほんを いれてください';
       else if (kind === 'char') {
         s.status = st;
         s.dec = st.entry && st.type !== 'upgrade' ? BB.decode(st.entry.code) : d; // 既存の戦士がいればその戦士で戦う
@@ -216,7 +221,7 @@
         $('pv' + cap).innerHTML = previewHtml(d, cap);
         preview = d;
       }
-    } else if (s.code.length > 0) $('w' + cap).textContent = `13桁のJANコードだけ使えます（いま${s.code.length}桁）`;
+    } else if (s.code.length > 0) $('w' + cap).textContent = `13けたのJANコードだけ つかえます（いま${s.code.length}けた）`;
     if (preview) makeSticker(preview).then((c) => { const box = $('stk' + cap); if (box && s.dec === preview) box.appendChild(c); });
   }
   // 戦士を手に入れた（スキャン・ランダム・入力の確定）ときに、すぐ図鑑へ登録する／別ロットなら限界Lvを上げる
@@ -225,19 +230,19 @@
     const s = slots[kind];
     if (kind === 'item') { // 書籍：持ち物に入れる（同じバーコードは1回だけ）
       if (!s.dec) return;
-      if (player.itemCodes.includes(code)) { $('iItem').textContent = 'このバーコードは、すでに使用済みです（一度読み取ったバーコードは、売ったあとでも使えません）'; return; }
+      if (player.itemCodes.includes(code)) { $('iItem').textContent = 'このバーコードは、もう つかっています（うったあとでも つかえません）'; return; }
       player.itemCodes.push(code); player.bag[s.dec.itemId] = (player.bag[s.dec.itemId] || 0) + 1;
       await savePlayer();
-      $('iItem').textContent = `🎁 ${s.dec.name} を持ち物に入れました！`;
+      $('iItem').textContent = `🎁 ${kanaItem(s.dec.name)} を もちものに いれました！`;
       return;
     }
     if (kind !== 'char' || !s.status || !['new', 'lot', 'upgrade'].includes(s.status.type)) return;
     const st = s.status, name = s.dec.name, oldMax = st.entry ? st.entry.maxLv : 0;
     await commitChar();
     const e = dex[s.dec.code] || st.entry;
-    const msg = st.type === 'new' ? `🆕 ${name} を図鑑に登録しました！（Lv${e.level}から・限界Lv${e.maxLv}）`
-      : st.type === 'upgrade' ? `✨ ${name} が ${s.dec.kirakira.name} に上書きされました！（Lv${e.level}・限界Lv${oldMax} → ${e.maxLv}）`
-      : `🎁 同じキャラ・同じ属性！ ${name} の限界Lv ${oldMax} → ${e.maxLv}`;
+    const msg = st.type === 'new' ? `🆕 ${name} を ずかんに とうろくしました！（Lv${e.level}から・げんかいLv${e.maxLv}）`
+      : st.type === 'upgrade' ? `✨ ${name} が ${s.dec.kirakira.name} に なりました！（Lv${e.level}・げんかいLv${oldMax} → ${e.maxLv}）`
+      : `🎁 おなじキャラ・おなじぞくせい！ ${name} の げんかいLv ${oldMax} → ${e.maxLv}`;
     setSlot('char', s.code, collab);
     $('iChar').textContent = msg;
   }
@@ -249,21 +254,21 @@
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const usedToday = (kind) => !!(daily[kind] && daily[kind].date === today());
   function updateRandButtons() {
-    document.querySelectorAll('[data-rand]').forEach((b) => { b.textContent = usedToday(b.dataset.rand) ? '🎲 今日は済' : '🎲 ランダム'; });
+    document.querySelectorAll('[data-rand]').forEach((b) => { b.textContent = usedToday(b.dataset.rand) ? '🎲 きょうは おわり' : '🎲 ランダム'; });
   }
   async function onRandom(kind) {
     const cap = kind === 'char' ? 'Char' : 'Item';
     let note;
     if (usedToday(kind)) {
       await acquire(kind, daily[kind].code);
-      note = '🎲 ランダムは1日1回です。今日のコードを入れ直しました（次は明日）';
+      note = '🎲 ランダムは 1日1かいです。きょうの コードを いれなおしました（つぎは あした）';
     } else {
       const code = BB.randomCode(kind);
       daily[kind] = { date: today(), code };
       await Store.setDaily(cur, kind, daily[kind]);
       updateRandButtons();
       await acquire(kind, code);
-      note = '🎲 今日のランダム（1日1回）';
+      note = '🎲 きょうの ランダム（1日1かい）';
     }
     const el = $('i' + cap);
     el.textContent = el.textContent ? note + '　' + el.textContent : note;
@@ -271,7 +276,7 @@
   document.querySelectorAll('[data-rand]').forEach((b) => b.onclick = () => onRandom(b.dataset.rand));
   // 持ち物：お金とアイテム
   const bagCount = () => Object.values(player.bag).reduce((a, b) => a + b, 0);
-  function renderWallet() { $('wallet').textContent = `${titleText() ? '【' + titleText() + '】　' : ''}💰 ${player.money.toLocaleString()}　🎒 持ち物 ${bagCount()}個`; }
+  function renderWallet() { $('wallet').textContent = `${titleText() ? '【' + titleText() + '】　' : ''}💰 ${player.money.toLocaleString()}　🎒 もちもの ${bagCount()}こ`; }
   async function savePlayer() { await Store.setPlayer(cur, player); renderWallet(); }
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
@@ -1713,14 +1718,14 @@
   // ---------- 家族クラウド ----------
   function renderCloud() {
     const box = $('cloudBtns'); box.innerHTML = '';
-    if (!window.Cloud) { $('cloudState').textContent = 'クラウドは使えません（この端末にだけ保存されます）'; return; }
+    if (!window.Cloud) { $('cloudState').textContent = 'クラウドは つかえません（このたんまつに だけ ほぞんされます）'; return; }
     const mkb = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; box.appendChild(b); };
     if (Cloud.isConnected()) {
-      $('cloudState').innerHTML = `☁ 接続中　家族コード：<b>${Cloud.familyCode()}</b><br>${Cloud.status() || ''}`;
-      mkb('🔄 今すぐ同期', cloudSync); mkb('📋 コードをコピー', cloudCopy); mkb('切断', cloudLeave);
+      $('cloudState').innerHTML = `☁ つながっています　かぞくコード：<b>${Cloud.familyCode()}</b><br>${Cloud.status() || ''}`;
+      mkb('🔄 いますぐ どうき', cloudSync); mkb('📋 コードをコピー', cloudCopy); mkb('きりはなす', cloudLeave);
     } else {
-      $('cloudState').textContent = '未接続（いまは、この端末にだけ保存されています）';
-      mkb('🔗 家族につなぐ', cloudCreate); mkb('🔑 家族コードで参加', () => cloudJoin(false));
+      $('cloudState').textContent = 'つながっていません（いまは、このたんまつに だけ ほぞんされています）';
+      mkb('🔗 かぞくにつなぐ', cloudCreate); mkb('🔑 かぞくコードで さんか', () => cloudJoin(false));
     }
   }
   const cloudMsg = (title, lines) => choose(title, [{ label: lines, value: 0, disabled: true }, { label: 'とじる', value: 0 }]);

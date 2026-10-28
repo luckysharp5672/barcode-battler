@@ -71,19 +71,20 @@
 
   function describeItem(e) {
     const STAT = { hp: '❤️', st: '⚔️', df: '🛡️', dx: '👟', sp: '✨' };
-    const STATUS = { poison: '毒', stun: '麻痺', sleep: '眠り' };
+    const STATUS = { poison: 'どく', stun: 'まひ', sleep: 'ねむり' };
+    const AJ = ['かぜ', 'つち', 'みず', 'ほのお', 'かみなり'];
     if (e.kind === 'consumable') {
       const p = [];
-      if (e.heal_hp_pct) p.push(`❤️${e.heal_hp_pct}%回復`);
-      if (e.heal_mp) p.push('特殊技がすぐ使える');
-      if (e.cure) p.push('状態異常を治す');
-      return '使い切り：' + p.join('・');
+      if (e.heal_hp_pct) p.push(`❤️${e.heal_hp_pct}%かいふく`);
+      if (e.heal_mp) p.push('とくしゅがすぐつかえる');
+      if (e.cure) p.push('じょうたいいじょうをなおす');
+      return 'つかいきり：' + p.join('・');
     }
     const p = Object.entries(e.bonus).map(([k, v]) => `${STAT[k]}${v > 0 ? '+' : ''}${v}`);
-    if (e.element) p.push((e.slot === 'weapon' ? '攻撃' : '体') + 'の属性が' + ATTRS[ATTR_OF_KEY[e.element]].name);
+    if (e.element) p.push((e.slot === 'weapon' ? 'こうげき' : 'からだ') + 'のぞくせいが' + AJ[ATTR_OF_KEY[e.element]]);
     for (const [k, v] of Object.entries(e.inflict || {})) p.push(`${STATUS[k]}${v}%`);
-    for (const [k, v] of Object.entries(e.resist || {})) p.push(`${ATTRS[ATTR_OF_KEY[k]].name}ダメージ-${v}%`);
-    if ((e.immune || []).length) p.push(e.immune.map((s) => STATUS[s]).join('・') + '無効');
+    for (const [k, v] of Object.entries(e.resist || {})) p.push(`${AJ[ATTR_OF_KEY[k]]}ダメージ-${v}%`);
+    if ((e.immune || []).length) p.push(e.immune.map((s) => STATUS[s]).join('・') + 'むこう');
     return p.join('、') || '-';
   }
 

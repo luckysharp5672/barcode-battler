@@ -56,7 +56,7 @@
   async function syncAll() {
     const fid = cfg().familyId;
     if (!fid) return { imported: 0, pushed: 0 };
-    setStatus('同期中…');
+    setStatus('どうきちゅう…');
     try {
       const f = await sdk(); await signIn();
       const snap = await f.F.getDocs(f.F.collection(f.db, 'families', fid, 'players'));
@@ -82,7 +82,7 @@
       }
       lastSyncAt = Date.now();
       const t = new Date(lastSyncAt);
-      setStatus(`同期ずみ ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}（受信${imported}／送信${pushed}）`);
+      setStatus(`どうきずみ ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}（うけとり${imported}／おくり${pushed}）`);
       return { imported, pushed };
     } catch (e) { setStatus(explain(e)); throw e; }
   }
@@ -93,7 +93,7 @@
     timers[pid] = setTimeout(async () => {
       try {
         const l = await root.Store.exportProfile(pid);
-        if (l) { await signIn(); await pushDoc(pid, l); lastSyncAt = Date.now(); setStatus('同期ずみ'); }
+        if (l) { await signIn(); await pushDoc(pid, l); lastSyncAt = Date.now(); setStatus('どうきずみ'); }
       } catch (e) { setStatus(explain(e)); }
     }, 1500);
   }

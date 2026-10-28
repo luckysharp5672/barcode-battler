@@ -190,8 +190,8 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 
   <div class="row" style="align-items:center">
     <select id="profSel" style="flex:2;min-height:44px;border-radius:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);padding:0 10px;font:inherit"></select>
-    <button id="btnNewProf">＋ ユーザー追加</button>
-    <button id="btnDelProf" style="flex:none;padding:11px 12px">🗑 削除</button>
+    <button id="btnNewProf">＋ ユーザーついか</button>
+    <button id="btnDelProf" style="flex:none;padding:11px 12px">🗑 さくじょ</button>
   </div>
   <div class="small" id="wallet" style="margin:-2px 0 10px"></div>
 
@@ -202,7 +202,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
       <button data-scan="char">📷 スキャン</button>
       <button data-rand="char">🎲 ランダム</button>
       <button id="btnCollab">🌟 コラボスキャン</button>
-      <button data-lib="char">📚 図鑑</button>
+      <button data-lib="char">📚 ずかん</button>
     </div>
     <div class="warn" id="wChar"></div>
     <div class="info" id="iChar"></div>
@@ -215,7 +215,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div class="row grid2">
       <button data-scan="item">📷 スキャン</button>
       <button data-rand="item">🎲 ランダム</button>
-      <button data-bag="item">🎒 持ち物</button>
+      <button data-bag="item">🎒 もちもの</button>
     </div>
     <div class="warn" id="wItem"></div>
     <div class="info" id="iItem"></div>
@@ -232,15 +232,15 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     </div>
   </div>
 
-  <div class="row"><button id="btnParty">👥 パーティ編成</button><button id="btnShop">🏪 お店</button><button id="btnHelp">📖 あそびかた</button></div>
+  <div class="row"><button id="btnParty">👥 パーティへんせい</button><button id="btnShop">🏪 おみせ</button><button id="btnHelp">📖 あそびかた</button></div>
 
   <div class="card" id="cloudCard">
-    <h2>☁ 家族クラウド（端末をまたいで図鑑・お金・パーティを共有）</h2>
+    <h2>☁ かぞくクラウド（たんまつをまたいで ずかん・おかね・パーティをきょうゆう）</h2>
     <div class="small" id="cloudState" style="margin-bottom:8px;line-height:1.6"></div>
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290834</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">ばん 10290844</div>
 </section>
 
 <!-- お店 -->
@@ -388,14 +388,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10290834"></script>
-<script src="stories.js?v=10290834"></script>
-<script src="engine.js?v=10290834"></script>
-<script src="collab.js?v=10290834"></script>
-<script src="battle.js?v=10290834"></script>
-<script src="multi.js?v=10290834"></script>
-<script src="store.js?v=10290834"></script>
-<script src="cloud.js?v=10290834"></script>
-<script src="app.js?v=10290834"></script>
+<script src="data.js?v=10290844"></script>
+<script src="stories.js?v=10290844"></script>
+<script src="engine.js?v=10290844"></script>
+<script src="collab.js?v=10290844"></script>
+<script src="battle.js?v=10290844"></script>
+<script src="multi.js?v=10290844"></script>
+<script src="store.js?v=10290844"></script>
+<script src="cloud.js?v=10290844"></script>
+<script src="app.js?v=10290844"></script>
 </body>
 </html>
