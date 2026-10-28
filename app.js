@@ -278,7 +278,7 @@
     const opts = ids.length
       ? ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name} ×${player.bag[id]}<br><span class="small">${d.text}</span>`, value: 0, disabled: true }; })
       : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
-    opts.push({ label: '← 戻る', value: 0 });
+    opts.push({ label: '← もどる', value: 0 });
     await choose('持ち物（パーティ編成で持たせられます）', opts);
   }
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
@@ -541,7 +541,7 @@
   async function pickPartyItem(code) {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0 && (!heldBy(id) || heldBy(id) === code));
     const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name}${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<br><span class="small">${d.text}</span>`, value: id }; }));
-    opts.push({ label: '← 戻る', value: 0 });
+    opts.push({ label: '← もどる', value: 0 });
     const id = await choose(`${dex[code].name} に持たせるアイテム`, opts);
     if (!id) return;
     if (id === '-') delete player.party.items[code]; else player.party.items[code] = id;
@@ -758,7 +758,7 @@
         return { label: locked ? `🔒 <b>${n}. ？？？</b>　<span class="small">${STAGES[i - 1].name}をクリアすると開きます</span>`
           : `${s.flag} <b>${n}. ${s.name}</b>　<span class="small">強さ Lv${s.lv}ごろ ${'★'.repeat(Math.ceil(n / 2))}${done ? '　✅クリア' : '　🆕'}${n === last && n > 1 ? '　（前回）' : ''}</span>`, value: n, disabled: locked };
       }),
-      { label: '← 戻る', value: -1 }]);
+      { label: '← もどる', value: -1 }]);
     if (v <= 0) return 0;
     try { localStorage.setItem(STAGE_KEY, String(v)); } catch (e) { /* 保存できなくても動く */ }
     return v;
@@ -773,7 +773,7 @@
     if (codes.length < PICK) {
       const v = await choose('パーティが足りません', [
         { label: `対戦には${PICK}体以上必要です（いま${codes.length}体）`, value: 0, disabled: true },
-        { label: '👥 パーティ編成へ', value: 1 }, { label: '← 戻る', value: 0 }]);
+        { label: '👥 パーティ編成へ', value: 1 }, { label: '← もどる', value: 0 }]);
       if (v) openParty();
       return;
     }
@@ -963,7 +963,7 @@
       const f = side.party[i];
       return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　❤️ ${view.hp[mySide][i]}/${f.maxHp}`, value: i };
     });
-    if (canCancel) opts.push({ label: '← 戻る', value: -1 });
+    if (canCancel) opts.push({ label: '← もどる', value: -1 });
     opts.push({ label: '🏳 あきらめる', value: -2 });
     const v = await choose(title, opts);
     if (v === -2) return (await confirmGiveUp()) ? 'giveup' : null;
@@ -979,8 +979,8 @@
     for (;;) {
       const f = Battle.actOf(st, mySide);
       const top = await choose(`${f.name} はどうする？`, [
-        { label: '⚔ スキル（このキャラで継続）', value: 'skill' },
-        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !Battle.benchAlive(st.sides[mySide]).length },
+        { label: '⚔ たたかう', value: 'skill' },
+        { label: '🔄 こうたい', value: 'switch', disabled: !Battle.benchAlive(st.sides[mySide]).length },
         { label: '🏳 あきらめる', value: 'giveup' }]);
       if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
@@ -988,11 +988,11 @@
           label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
           value: s.id, disabled: !!s.off,
         }));
-        opts.push({ label: '← 戻る', value: 0 });
+        opts.push({ label: '← もどる', value: 0 });
         const id = await choose('スキル', opts);
         if (id) return { type: 'skill', skill: id };
       } else if (top === 'switch') {
-        const to = await pickBench('だれと交代する？', true);
+        const to = await pickBench('だれとこうたいする？', true);
         if (to === 'giveup') return { type: 'giveup' };
         if (to !== null) return { type: 'switch', to };
       }
@@ -1106,8 +1106,8 @@
       const f = Multi.fighterAt(st, 0, slot);
       const bench = Multi.benchAlive(st.sides[0]).filter((i) => !taken.has(i));
       const top = await choose(`${BB.ATTRS[f.attr].emoji} ${f.name} はどうする？`, [
-        { label: '⚔ スキル', value: 'skill' },
-        { label: '🔄 交代（スキルより先に行われます）', value: 'switch', disabled: !bench.length },
+        { label: '⚔ たたかう', value: 'skill' },
+        { label: '🔄 こうたい', value: 'switch', disabled: !bench.length },
         { label: '🏳 あきらめる', value: 'giveup' }]);
       if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
@@ -1115,7 +1115,7 @@
           label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
           value: s.id, disabled: !!s.off,
         }));
-        opts.push({ label: '← 戻る', value: 0 });
+        opts.push({ label: '← もどる', value: 0 });
         const id = await choose(`${f.name} のスキル`, opts);
         if (!id) continue;
         if (!Multi.needsTarget(id)) return { type: 'skill', skill: id };
@@ -1125,13 +1125,13 @@
           const d = Multi.fighterAt(st, 1, k), p = Math.ceil(mview.hp[1][Multi.idxAt(st, 1, k)] / d.maxHp * 100);
           const aff = BB.affinity(f.atkAttr, d.attr);
           return { label: `${BB.ATTRS[d.attr].emoji} <b>${d.name}</b> <span class="small">❤️ ${p}% ／ ${aff > 1 ? '◎ 有利' : aff < 1 ? '▼ 不利' : '－ 互角'}</span>`, value: k + 1 };
-        }).concat([{ label: '← 戻る', value: 0 }]));
+        }).concat([{ label: '← もどる', value: 0 }]));
         if (tg) return { type: 'skill', skill: id, target: tg - 1 };
       } else if (top === 'switch') {
-        const to = await choose('だれと交代する？', bench.map((i) => {
+        const to = await choose('だれとこうたいする？', bench.map((i) => {
           const m = st.sides[0].party[i];
           return { label: `${BB.ATTRS[m.attr].emoji} ${m.name} Lv${m.level}　❤️ ${mview.hp[0][i]}/${m.maxHp}`, value: i + 1 };
-        }).concat([{ label: '← 戻る', value: 0 }]));
+        }).concat([{ label: '← もどる', value: 0 }]));
         if (to) { taken.add(to - 1); return { type: 'switch', to: to - 1 }; }
       }
     }
@@ -1308,7 +1308,7 @@
     if (partyCodes().length < PICK) {
       const v = await choose('パーティが足りません', [
         { label: `対戦には${PICK}体以上必要です（いま${partyCodes().length}体）`, value: 0, disabled: true },
-        { label: '👥 パーティ編成へ', value: 1 }, { label: '← 戻る', value: 0 }]);
+        { label: '👥 パーティ編成へ', value: 1 }, { label: '← もどる', value: 0 }]);
       if (v) openParty();
       return;
     }
@@ -1447,13 +1447,13 @@
     await afterPvpGame(res, foeSel);
   }
 
-  // ---- 入力の時間制限（通信対戦のターンだけ。時間切れは自動で「たたかう」） ----
+  // ---- 入力の時間制限（通信対戦のターンだけ。時間切れは自動で「こうげき」） ----
   let turnIv = null;
   function stopTurnTimer() { clearInterval(turnIv); turnIv = null; turnExpired = false; $('turnTimer').textContent = ''; }
   async function timedChoice(fn, fallback) {
     let left = TURN_SECONDS; turnExpired = false;
     const el = $('turnTimer');
-    const tick = () => { el.innerHTML = `⏱ のこり <b>${left}</b> 秒${left <= 10 ? '（時間切れは自動で「たたかう」）' : ''}`; el.classList.toggle('warnt', left <= 10); };
+    const tick = () => { el.innerHTML = `⏱ のこり <b>${left}</b> 秒${left <= 10 ? '（時間切れは自動で「こうげき」）' : ''}`; el.classList.toggle('warnt', left <= 10); };
     tick(); clearInterval(turnIv);
     turnIv = setInterval(() => {
       left--; tick();
@@ -1770,7 +1770,7 @@
     ・3本勝負では、前の試合で相手が出したキャラに「G」の印が付きます。試合のあとに、相手のパーティが公開されます。<br>
     ・毎ターン、自分と相手が<b>同時に</b>スキルか交代を決め、一斉に処理されます。順番は <b>交代 → 優先度の高いスキル → 👟の高い順</b> です。<br>
     ・ステータスのマーク：❤️ たいりょく／⚔️ こうげき／🛡️ ぼうぎょ／👟 すばやさ（はやい人が先に動く）／✨ とくしゅ（特殊技の強さ）。<br>
-    ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
+    ・スキル：こうげき／クイック（優先度+1）／とくしゅ（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／やくそう／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
     ・戦いのあとに、経験値（参加した3体は全部、控えの3体は7割。勝つと経験値は特に多い）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。「🌟 コラボスキャン」は、合言葉を知っている家族だけの特別なキャラです（読み取りのルールは、ふつうのスキャンと同じ）。<br>

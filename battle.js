@@ -6,12 +6,12 @@
   // ---- スキル ----
   // pri: 優先度（大きいほど先。同じなら DX が高い方が先）  交代は、すべてのスキルより先に処理される
   const SKILLS = {
-    attack: { id: 'attack', name: 'たたかう', pri: 0, kind: 'dmg', power: 1.0, desc: '通常攻撃（外れることがある）' },
+    attack: { id: 'attack', name: 'こうげき', pri: 0, kind: 'dmg', power: 1.0, desc: '通常攻撃（外れることがある）' },
     quick: { id: 'quick', name: 'クイック', pri: 1, kind: 'dmg', power: 0.6, desc: '先制の弱い一撃（優先度+1）' },
-    special: { id: 'special', name: '特殊技', pri: 0, kind: 'sp', desc: '✨の値で攻撃。防御無視・必中。3ターンに1回' },
+    special: { id: 'special', name: 'とくしゅ', pri: 0, kind: 'sp', desc: '✨の値で攻撃。防御無視・必中。3ターンに1回' },
     guard: { id: 'guard', name: 'ガード', pri: 3, kind: 'guard', desc: 'そのターンの攻撃を防ぐ（優先度+3）。連続では使えない' },
-    herb: { id: 'herb', name: '薬草', pri: 0, kind: 'herb', desc: 'HPを20%回復（薬草1個。チームで3個）' },
-    power: { id: 'power', name: 'パワーキー', pri: 0, kind: 'power', desc: '薬草1個で、運しだいの大回復（10〜84%）' },
+    herb: { id: 'herb', name: 'やくそう', pri: 0, kind: 'herb', desc: 'HPを20%回復（やくそう1個。チームで3個）' },
+    power: { id: 'power', name: 'パワーキー', pri: 0, kind: 'power', desc: 'やくそう1個で、運しだいの大回復（10〜84%）' },
     item: { id: 'item', name: 'アイテム', pri: 0, kind: 'item', desc: '持っている回復薬を使う（1回だけ）' },
   };
   const SKILL_ORDER = ['attack', 'quick', 'special', 'guard', 'herb', 'power', 'item'];
@@ -35,7 +35,7 @@
       let off = '';
       if (id === 'special' && f.spCd > 0) off = `あと${f.spCd}ターン`;
       if (id === 'guard' && side.lastGuard) off = '連続では使えない';
-      if ((id === 'herb' || id === 'power') && side.herbs <= 0) off = '薬草がない';
+      if ((id === 'herb' || id === 'power') && side.herbs <= 0) off = 'やくそうがない';
       if ((id === 'herb' || id === 'power') && f.hp >= f.maxHp) off = 'HPが満タン';
       if (id === 'item' && f.consumable && !(f.consumable.heal_hp_pct && f.hp < f.maxHp) && !f.consumable.cure && !f.consumable.heal_mp) off = '使えない';
       return { ...sk, off };

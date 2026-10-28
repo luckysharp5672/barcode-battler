@@ -32,7 +32,7 @@
       let off = '';
       if (id === 'special' && f.spCd > 0) off = `あと${f.spCd}ターン`;
       if (id === 'guard' && f.lastGuard) off = '連続では使えない';
-      if ((id === 'herb' || id === 'power') && side.herbs <= 0) off = '薬草がない';
+      if ((id === 'herb' || id === 'power') && side.herbs <= 0) off = 'やくそうがない';
       if ((id === 'herb' || id === 'power') && f.hp >= f.maxHp) off = 'HPが満タン';
       if (id === 'item' && f.consumable && !(f.consumable.heal_hp_pct && f.hp < f.maxHp) && !f.consumable.cure && !f.consumable.heal_mp) off = '使えない';
       return { ...sk, off };
