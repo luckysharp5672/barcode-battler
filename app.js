@@ -54,7 +54,8 @@
       }
     }
     cur = (await Store.getCurrent()) || list[0].id;
-    $('profSel').innerHTML = list.map((p) => `<option value="${p.id}"${p.id === cur ? ' selected' : ''}>👤 ${p.name}</option>`).join('');
+    const meP = list.find((p) => p.id === cur);
+    $('btnUser').textContent = meP ? meP.name : 'ユーザー';   // 右上のボタンには、いま選んでいるユーザー名だけ
     dex = await Store.getDex(cur);
     daily = await Store.getDaily(cur);
     player = await Store.getPlayer(cur);
@@ -85,13 +86,12 @@
     cleanParty();
     setSlot('char', ''); setSlot('item', '');
   }
-  $('profSel').onchange = async (e) => { await Store.setCurrent(e.target.value); await loadProfiles(); };
-  $('btnNewProf').onclick = async () => {
+  async function addProfile() {
     const name = (window.prompt('追加するユーザーのなまえ', '') || '').trim();
     if (name) { await Store.createProfile(name); await loadProfiles(); }
-  };
+  }
   // ユーザーの削除：このユーザーのデータをすべて消す（家族クラウドにつないでいれば、ほかの端末からも消える）
-  $('btnDelProf').onclick = async () => {
+  async function deleteProfile() {
     const me = (await Store.listProfiles()).find((p) => p.id === cur);
     if (!me) return;
     const linked = window.Cloud && Cloud.isConnected();
@@ -103,6 +103,19 @@
     await Store.deleteProfile(cur);
     await loadProfiles();
     renderCloud();
+  }
+  // 右上のユーザーボタン：ユーザーのきりかえ・ついか・さくじょ
+  $('btnUser').onclick = async () => {
+    const list = await Store.listProfiles();
+    const v = await choose('ユーザー', [
+      ...list.map((p) => ({ label: `${p.id === cur ? '✅ ' : '👤 '}${p.name}`, value: 'u:' + p.id })),
+      { label: '＋ ユーザーついか', value: 'add' },
+      { label: '🗑 さくじょ（いまのユーザー）', value: 'del' },
+      { label: 'とじる', value: 0 }], {});
+    if (!v) return;
+    if (v === 'add') await addProfile();
+    else if (v === 'del') await deleteProfile();
+    else if (v.startsWith('u:') && v.slice(2) !== cur) { await Store.setCurrent(v.slice(2)); await loadProfiles(); }
   };
   // 同じシール = キャラ(⑤⑥)・キラキラ(⑦⑧)・属性(⑨)が同じ（45と49は同じ扱い、③④は見ない）。1つのシールにつき戦士は1体だけ
   const prefixOf = (code) => BB.identityKey(code);
