@@ -443,8 +443,11 @@
   function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); window.scrollTo(0, 0); }
 
   // ---------- モーダル ----------
-  function modal(html) { $('modalBody').innerHTML = html; $('modalMask').classList.add('on'); }
-  function closeModal() { $('modalMask').classList.remove('on'); }
+  function modal(html) {
+    $('modalBody').innerHTML = html; $('modalMask').classList.add('on');
+    document.body.classList.toggle('inbattle', !!document.querySelector('#battle.on, #battle2.on'));   // 戦闘中は、選択肢を下に出して、上のステータスを隠さない
+  }
+  function closeModal() { $('modalMask').classList.remove('on'); document.body.classList.remove('inbattle'); }
   let activeChoose = null, turnExpired = false;
   function choose(title, options) {
     return new Promise((res, rej) => {
@@ -575,7 +578,7 @@
       el.onclick = () => modal(`<h3 style="margin:0 0 6px">属性の相性</h3><div style="display:flex;justify-content:center">${attrRingSvg(240)}</div>
         <p class="small" style="margin:8px 0">矢印の <b>元</b> の属性のこうげきは、<b>先</b> の属性に強い（×1.5）。逆向きは弱い（×0.5）。同じ属性どうしは ×0.75。</p>
         <p class="small" style="margin:0 0 8px">${RING_ORDER.map((a) => BB.ATTRS[a].emoji + BB.ATTRS[a].name).join(' → ')} → ${BB.ATTRS[RING_ORDER[0]].emoji}${BB.ATTRS[RING_ORDER[0]].name}</p>
-        <button class="pri" style="width:100%" onclick="document.getElementById('modalMask').classList.remove('on')">閉じる</button>`);
+        <button class="pri" style="width:100%" onclick="document.getElementById('modalMask').classList.remove('on');document.body.classList.remove('inbattle')">閉じる</button>`);
     });
   }
   const STAT_NAMES = [['hp', '❤️'], ['st', '⚔️'], ['df', '🛡️'], ['dx', '👟'], ['sp', '✨']];
@@ -1775,7 +1778,7 @@
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
     ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（上限なし）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
-    <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
+    <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on');document.body.classList.remove('inbattle')" style="width:100%">閉じる</button>`);
 
   if (window.Cloud) Cloud.onStatus = renderCloud;
   renderCloud();   // まず表示する（このあとの読み込みで何かあっても、家族クラウドのボタンは出す）

@@ -160,6 +160,13 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
 .mbars{margin-top:4px;display:grid;gap:2px}.mb{display:flex;align-items:center;gap:4px;font-size:12px}.mb span{width:18px;text-align:center}.mb i{flex:1;height:6px;background:#0d1117;border-radius:3px;overflow:hidden}.mb u{display:block;height:100%;border-radius:3px}.mb b{width:78px;text-align:right;font-size:12px;white-space:nowrap}.mb em{font-style:normal;font-size:11px;margin-left:2px}.prow{position:relative}.tot{position:absolute;left:6px;top:4px;z-index:2;font-size:11px;color:var(--acc);background:rgba(13,17,23,.88);border:1px solid var(--acc);border-radius:6px;padding:0 5px;line-height:1.5}.mb em.up{color:#3fb950}.mb em.dn{color:#f85149}.mb i{position:relative}.story{margin:2px 0 6px;font-size:14px;line-height:1.7}
 .ringref{cursor:pointer;flex:none;line-height:0}.btop{display:flex;align-items:center;gap:8px;margin-bottom:6px}.btop .starline{flex:1;text-align:left;margin:0}
 .mrow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}.mcard{position:relative;margin:0;padding:8px;display:flex;flex-direction:column;gap:6px}.mcard.dead{opacity:.4}.mcard.acting{outline:2px solid var(--acc)}.mstk{width:88px;height:88px;align-self:center;border-radius:10px;overflow:hidden;background:#0d1117}.mstk canvas{width:100%;height:100%;display:block}.minfo .top{display:flex;justify-content:space-between;font-size:13px}.mbench{margin:2px 0 6px}
+/* 戦闘中の選択肢：画面の下に出して、上のキャラのステータス（HP・状態）が見えたままにする */
+body.inbattle #modalMask{background:transparent;align-items:flex-end;padding:0 8px 8px;pointer-events:none}
+body.inbattle #modalMask .modal{pointer-events:auto;max-height:44dvh;padding:10px 12px;border-color:var(--acc);box-shadow:0 -8px 28px #000c}
+body.inbattle .modal h2{font-size:14px;margin:0 0 6px}
+body.inbattle .lib{gap:4px}
+body.inbattle .lib button{padding:8px 12px;min-height:0}
+body.inbattle .screen.on{padding-bottom:46dvh}
 </style>
 </head>
 <body>
@@ -217,7 +224,7 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290717</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290737</div>
 </section>
 
 <!-- お店 -->
@@ -364,14 +371,14 @@ body[data-frame="rainbow"] :is(.stkwrap,#partyBox .pth,#pvMine .pth,#meCard .stk
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10290717"></script>
-<script src="stories.js?v=10290717"></script>
-<script src="engine.js?v=10290717"></script>
-<script src="collab.js?v=10290717"></script>
-<script src="battle.js?v=10290717"></script>
-<script src="multi.js?v=10290717"></script>
-<script src="store.js?v=10290717"></script>
-<script src="cloud.js?v=10290717"></script>
-<script src="app.js?v=10290717"></script>
+<script src="data.js?v=10290737"></script>
+<script src="stories.js?v=10290737"></script>
+<script src="engine.js?v=10290737"></script>
+<script src="collab.js?v=10290737"></script>
+<script src="battle.js?v=10290737"></script>
+<script src="multi.js?v=10290737"></script>
+<script src="store.js?v=10290737"></script>
+<script src="cloud.js?v=10290737"></script>
+<script src="app.js?v=10290737"></script>
 </body>
 </html>
