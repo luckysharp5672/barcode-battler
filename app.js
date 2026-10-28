@@ -1213,6 +1213,7 @@
 
   // 結果：出場した戦士に経験値、お金、まれにアイテム
   const RESERVE_XP = 0.7;
+  const REWARD_MULT = 2;                                  // 戦いの報酬（経験値・お金）の倍率
   async function finishMatch() {
     const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
     $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
@@ -1221,7 +1222,7 @@
     const avgFoe = known.length ? Math.round(known.reduce((a, f) => a + f.level, 0) / known.length) : 1;
     $('resSub').textContent = match.pvp ? `${match.oppName} さんとの対戦：${match.wins[0]}勝 ${match.wins[1]}敗` : match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
     const members = [], boost2 = !!match.boost || player.xp2 === today();
-    const baseXp = (win ? 30 + 5 * avgFoe : 10) * (boost2 ? 2 : 1);
+    const baseXp = (win ? 30 + 5 * avgFoe : 10) * REWARD_MULT * (boost2 ? 2 : 1);
     // 出場した3体は満額、出番のなかった控えは7割
     for (const code of match.codes) {
       const e = dex[code]; if (!e) continue;
@@ -1232,7 +1233,7 @@
       await Store.saveFighter(cur, e);
       members.push({ name: e.name, oldLv, e, gain, reserve: !played });
     }
-    const gold = BB.rewardMoney(win, avgFoe, rng);
+    const gold = BB.rewardMoney(win, avgFoe, rng) * REWARD_MULT;
     player.money += gold;
     for (const id of match.usedMine) { // 使い切りのアイテムは、持ち物からへる
       player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
@@ -1554,7 +1555,7 @@
   $('btnLobbyBack').onclick = async () => { await cancelRoom(); show('home'); };
 
   // ---------- お店（今日の品・売る・修行・持ち込み・見た目） ----------
-  const TRAIN_DAILY_XP = 600, XP_PRICE = 2;               // 修行：1日600XPまで、1XP=2円
+  const XP_PRICE = 1;                                       // 修行：1XP=1円（回数の上限なし）
   const CARRY_HERB_PRICE = 120, CARRY_HERB_MAX = 2, BOOST_PRICE = 250, DAY_BOOST_PRICE = 700;
   const TITLES = [
     { id: 'hunter', name: 'バーコードハンター', price: 300 }, { id: 'collector', name: 'シールコレクター', price: 500 },
