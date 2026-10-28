@@ -194,14 +194,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   <div class="small" id="wallet" style="margin:-2px 0 10px"></div>
 
   <div class="card" id="slotChar">
-    <h2>① 戦士を手に入れる（スキャン・ランダム・数字入力）</h2>
-    <input type="text" id="inChar" inputmode="numeric" placeholder="45/49で始まる商品のJAN" maxlength="13">
+    <h2>① 戦士を手に入れる（スキャン・ランダム）</h2>
+    <input type="hidden" id="inChar">
     <div class="row">
       <button data-scan="char">📷 スキャン</button>
       <button data-rand="char">🎲 ランダム</button>
       <button data-lib="char">📚 図鑑</button>
     </div>
-    <div class="row" style="margin-top:6px"><button id="btnCollab">🌟 コラボスキャン</button><button id="btnCollabNum" style="flex:none;width:auto">🔢 数字で</button></div>
+    <div class="row" style="margin-top:6px"><button id="btnCollab">🌟 コラボスキャン</button></div>
     <div class="warn" id="wChar"></div>
     <div class="info" id="iChar"></div>
     <div id="pvChar"></div>
@@ -209,7 +209,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 
   <div class="card" id="slotItem">
     <h2>② アイテムを手に入れる（書籍のバーコード）</h2>
-    <input type="text" id="inItem" inputmode="numeric" placeholder="9784で始まる書籍のJAN" maxlength="13">
+    <input type="hidden" id="inItem">
     <div class="row">
       <button data-scan="item">📷 スキャン</button>
       <button data-rand="item">🎲 ランダム</button>
@@ -234,7 +234,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290801</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290818</div>
 </section>
 
 <!-- お店 -->
@@ -356,10 +356,11 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 
 <!-- スキャンモーダル -->
 <div class="mask" id="scanMask"><div class="modal">
-  <h2 style="margin:0 0 8px;font-size:16px">バーコードを写してください</h2>
+  <h2 style="margin:0 0 8px;font-size:16px">バーコードを写すか、数字で入力</h2>
   <div class="vwrap"><video id="video" playsinline muted></video><div class="guide"></div></div>
   <div class="row" id="scanTools" style="display:none;margin-top:8px"><button id="btnTorch">🔦 ライト</button><button id="btnZoom">🔍 ズーム</button></div>
   <div class="row" style="margin-top:8px"><label class="filebtn">📷 写真で読む<input type="file" id="scanFile" accept="image/*" capture="environment" style="display:none"></label></div>
+  <div class="row" style="margin-top:8px"><input type="text" id="scanInput" inputmode="numeric" placeholder="13けたの数字を直接入力" maxlength="13" style="flex:1;min-width:0"><button id="scanGo" style="flex:none;width:auto">決定</button></div>
   <p class="small" id="scanMsg"></p>
   <div class="row"><button id="scanClose">閉じる</button></div>
 </div></div>
@@ -381,14 +382,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10290801"></script>
-<script src="stories.js?v=10290801"></script>
-<script src="engine.js?v=10290801"></script>
-<script src="collab.js?v=10290801"></script>
-<script src="battle.js?v=10290801"></script>
-<script src="multi.js?v=10290801"></script>
-<script src="store.js?v=10290801"></script>
-<script src="cloud.js?v=10290801"></script>
-<script src="app.js?v=10290801"></script>
+<script src="data.js?v=10290818"></script>
+<script src="stories.js?v=10290818"></script>
+<script src="engine.js?v=10290818"></script>
+<script src="collab.js?v=10290818"></script>
+<script src="battle.js?v=10290818"></script>
+<script src="multi.js?v=10290818"></script>
+<script src="store.js?v=10290818"></script>
+<script src="cloud.js?v=10290818"></script>
+<script src="app.js?v=10290818"></script>
 </body>
 </html>

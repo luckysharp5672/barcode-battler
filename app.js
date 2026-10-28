@@ -295,11 +295,6 @@
     return false;
   }
   $('btnCollab').onclick = async () => { if (await ensureCollab()) openScan('char', true); };
-  $('btnCollabNum').onclick = async () => {
-    if (!(await ensureCollab())) return;
-    const v = (window.prompt('コラボで読み取るバーコードの数字（13桁）', '') || '').replace(/\D/g, '');
-    if (v) await acquire('char', v, true);
-  };
 
   // 図鑑
   function openLib() {
@@ -397,10 +392,10 @@
   async function openScan(kind, collab) {
     scanKind = kind; scanCollab = !!collab;
     $('scanMask').classList.add('on');
-    $('scanMsg').textContent = ''; $('scanTools').style.display = 'none';
+    $('scanMsg').textContent = ''; $('scanTools').style.display = 'none'; $('scanInput').value = '';
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
-    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）。下の「写真で読む」は使えます'; return; }
+    } catch (e) { $('scanMsg').textContent = 'カメラを使えませんでした（HTTPS接続とカメラ許可が必要です）。「写真で読む」か、数字の入力は使えます'; return; }
     const v = $('video');
     v.srcObject = stream; await v.play();
     track = stream.getVideoTracks()[0];
@@ -438,6 +433,19 @@
     $('scanMask').classList.remove('on');
   }
   $('scanClose').onclick = closeScan;
+  // JANコードを数字で直接入力（スキャン画面の中）。通常のスキャンもコラボも、いま開いている画面の種類で登録する
+  async function submitScanInput() {
+    const v = $('scanInput').value.replace(/\D/g, '');
+    if (v.length !== 13) { $('scanMsg').textContent = `13けたの数字を入れてください（いま${v.length}けた）`; return; }
+    if (!BB.isValidJan(v)) { $('scanMsg').textContent = '末尾の数字（チェックデジット）が合いません。JANコードではありません'; return; }
+    const k = BB.prefixKind(v);
+    if (scanKind === 'char' && k !== 'char') { $('scanMsg').textContent = '戦士には、先頭が45か49の商品のバーコードを入れてください'; return; }
+    if (scanKind === 'item' && k !== 'item') { $('scanMsg').textContent = 'アイテムには、先頭が9784の書籍のバーコードを入れてください'; return; }
+    const kind = scanKind, collab = scanCollab;
+    closeScan(); await acquire(kind, v, collab);
+  }
+  $('scanGo').onclick = submitScanInput;
+  $('scanInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitScanInput(); } });
 
   // ---------- 画面切替 ----------
   function show(id) {
@@ -1760,7 +1768,7 @@
   $('btnHome').onclick = () => { renderWallet(); show('home'); };
   $('btnHelp').onclick = () => modal(`<h2 style="margin:0 0 8px;font-size:16px">あそびかた</h2>
     <p class="small" style="line-height:1.7">・バーコード（標準タイプのJAN。13桁）から、戦士の「シール」が決まります。先頭が45・49の商品が戦士（①②。45と49は同じ）、9784の書籍がアイテムです。それ以外は使えません。<br>
-    ・戦士は、スキャン・ランダム・数字入力のあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧）／属性（⑨）。③④は使いません。<br>
+    ・戦士は、スキャン（カメラ・写真・数字の直接入力）・ランダムのあと、その場で図鑑に登録されます。シールは3層：キャラ（⑤⑥）／キラキラ（⑦⑧）／属性（⑨）。③④は使いません。<br>
     ・<b>キラキラで強さが変わります</b>（弱い順）：ベーシック（Lv1から・限界Lv10）／EX（Lv10から・全能力×1.1・限界30）／レア（Lv20から・×1.2・限界50）／スーパーレア（Lv30から・×1.2・限界70）／ハロウィン（Lv40から・×1.2・限界90）／レジェンド（Lv50から・×1.2・限界99）。能力は最大999。<br>
     ・同じキャラ・同じ属性のバーコードを読むと、<b>上位のキラキラなら上書き</b>（レベルや経験値はそのまま）、<b>同等か下位なら限界レベル+10</b>（最大Lv99）。<br>
     ・「👥 パーティ編成」で最大6体を選びます（同じキャラは1体まで）。持たせるアイテムも決めます（同じアイテムは1体まで）。<br>
