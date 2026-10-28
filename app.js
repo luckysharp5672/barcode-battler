@@ -440,26 +440,29 @@
   $('scanClose').onclick = closeScan;
 
   // ---------- 画面切替 ----------
-  function show(id) { document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); window.scrollTo(0, 0); }
+  function show(id) {
+    document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id)); window.scrollTo(0, 0);
+    document.body.classList.toggle('inbattle', id === 'battle' || id === 'battle2');   // 戦闘中は、ステータスを固定して、選択ウィンドウは下に置く
+  }
 
   // ---------- モーダル ----------
   function modal(html) {
     $('modalBody').innerHTML = html; $('modalMask').classList.add('on');
-    document.body.classList.toggle('inbattle', !!document.querySelector('#battle.on, #battle2.on'));   // 戦闘中は、選択肢を下に出して、上のステータスを隠さない
   }
-  function closeModal() { $('modalMask').classList.remove('on'); document.body.classList.remove('inbattle'); }
+  function closeModal() { $('modalMask').classList.remove('on'); }
   let activeChoose = null, turnExpired = false;
-  function choose(title, options) {
+  function choose(title, options, cfg = {}) {
     return new Promise((res, rej) => {
       if (turnExpired) { rej(new Error('timeout')); return; }   // 通信対戦：入力の時間が切れたあとは、開かない
       activeChoose = { rej };
-      modal(`<h2 style="margin:0 0 8px;font-size:16px">${title}</h2><div class="lib" id="choices"></div>`);
+      modal(`<div class="mhead"><h2>${title}</h2>${cfg.back ? '<button class="mback" id="mBack">もどる</button>' : ''}</div><div class="lib${cfg.grid ? ' grid3' : ''}" id="choices"></div>`);
       options.forEach((o) => {
         const b = document.createElement('button');
         b.innerHTML = o.label; b.disabled = !!o.disabled;
         b.onclick = () => { activeChoose = null; closeModal(); res(o.value); };
         $('choices').appendChild(b);
       });
+      if (cfg.back) $('mBack').onclick = () => { activeChoose = null; closeModal(); res(cfg.back.value); };
     });
   }
   // 開いている選択を、時間切れ（'timeout'）や取りやめ（'aborted'）でとじる
@@ -578,7 +581,7 @@
       el.onclick = () => modal(`<h3 style="margin:0 0 6px">属性の相性</h3><div style="display:flex;justify-content:center">${attrRingSvg(240)}</div>
         <p class="small" style="margin:8px 0">矢印の <b>元</b> の属性のこうげきは、<b>先</b> の属性に強い（×1.5）。逆向きは弱い（×0.5）。同じ属性どうしは ×0.75。</p>
         <p class="small" style="margin:0 0 8px">${RING_ORDER.map((a) => BB.ATTRS[a].emoji + BB.ATTRS[a].name).join(' → ')} → ${BB.ATTRS[RING_ORDER[0]].emoji}${BB.ATTRS[RING_ORDER[0]].name}</p>
-        <button class="pri" style="width:100%" onclick="document.getElementById('modalMask').classList.remove('on');document.body.classList.remove('inbattle')">閉じる</button>`);
+        <button class="pri" style="width:100%" onclick="document.getElementById('modalMask').classList.remove('on')">閉じる</button>`);
     });
   }
   const STAT_NAMES = [['hp', '❤️'], ['st', '⚔️'], ['df', '🛡️'], ['dx', '👟'], ['sp', '✨']];
@@ -985,11 +988,10 @@
       if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
         const opts = Battle.availableSkills(st, mySide).map((s) => ({
-          label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
+          label: `<b class="big">${s.name}</b>${s.off ? `<span class="why">${s.off}</span>` : ''}`,
           value: s.id, disabled: !!s.off,
         }));
-        opts.push({ label: '← もどる', value: 0 });
-        const id = await choose('スキル', opts);
+        const id = await choose('たたかう', opts, { grid: true, back: { value: 0 } });
         if (id) return { type: 'skill', skill: id };
       } else if (top === 'switch') {
         const to = await pickBench('だれとこうたいする？', true);
@@ -1112,11 +1114,10 @@
       if (top === 'giveup') { if (await confirmGiveUp()) return { type: 'giveup' }; continue; }
       if (top === 'skill') {
         const opts = Multi.availableSkills(st, 0, slot).map((s) => ({
-          label: `<b>${s.name}</b>${s.pri ? ` <span class="tag">優先度${s.pri > 0 ? '+' : ''}${s.pri}</span>` : ''}<br><span class="small">${s.off ? '✕ ' + s.off : s.desc}</span>`,
+          label: `<b class="big">${s.name}</b>${s.off ? `<span class="why">${s.off}</span>` : ''}`,
           value: s.id, disabled: !!s.off,
         }));
-        opts.push({ label: '← もどる', value: 0 });
-        const id = await choose(`${f.name} のスキル`, opts);
+        const id = await choose('たたかう', opts, { grid: true, back: { value: 0 } });
         if (!id) continue;
         if (!Multi.needsTarget(id)) return { type: 'skill', skill: id };
         const foes = Multi.liveSlots(st, 1);
@@ -1778,7 +1779,7 @@
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
     ・「🏪 お店」：毎日かわる3つの品を買う／持ち物を売る／お金で経験値を買う「修行」（上限なし）／次の試合だけの「持ち込み」（薬草+1・経験値×2）／称号とシールの枠（見た目だけ）。<br>
     ・書籍のアイテムは、手に入れると持ち物に入ります（同じバーコードは1回だけ）。使い切りの回復薬は、使うと持ち物からへります。</p>
-    <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on');document.body.classList.remove('inbattle')" style="width:100%">閉じる</button>`);
+    <button class="pri" onclick="document.getElementById('modalMask').classList.remove('on')" style="width:100%">閉じる</button>`);
 
   if (window.Cloud) Cloud.onStatus = renderCloud;
   renderCloud();   // まず表示する（このあとの読み込みで何かあっても、家族クラウドのボタンは出す）
