@@ -222,13 +222,17 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div id="pvItem"></div>
   </div>
 
-  <div class="row">
-    <button id="btnParty">👥 パーティ編成</button>
-    <button class="pri" id="btnBattle">⚔ シングル（1本）</button>
-    <button class="pri" id="btnBo3">🏆 3本勝負</button>
-    <button class="pri" id="btnMulti">👥 マルチ（2対2）</button>
+  <div class="card" id="slotBattle">
+    <h2 class="getttl">⚔ たいせん</h2>
+    <div class="row grid2">
+      <button class="pri" id="btnBattle">⚔ シングル</button>
+      <button class="pri" id="btnBo3">🏆 3かい</button>
+      <button class="pri" id="btnMulti">👥 2x2</button>
+      <button class="pri" id="btnPvp">🌐 かぞく</button>
+    </div>
   </div>
-  <div class="row"><button id="btnShop">🏪 お店</button><button id="btnPvp">🌐 家族対戦</button><button id="btnHelp">📖 あそびかた</button></div>
+
+  <div class="row"><button id="btnParty">👥 パーティ編成</button><button id="btnShop">🏪 お店</button><button id="btnHelp">📖 あそびかた</button></div>
 
   <div class="card" id="cloudCard">
     <h2>☁ 家族クラウド（端末をまたいで図鑑・お金・パーティを共有）</h2>
@@ -236,7 +240,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290832</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290834</div>
 </section>
 
 <!-- お店 -->
@@ -384,14 +388,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10290832"></script>
-<script src="stories.js?v=10290832"></script>
-<script src="engine.js?v=10290832"></script>
-<script src="collab.js?v=10290832"></script>
-<script src="battle.js?v=10290832"></script>
-<script src="multi.js?v=10290832"></script>
-<script src="store.js?v=10290832"></script>
-<script src="cloud.js?v=10290832"></script>
-<script src="app.js?v=10290832"></script>
+<script src="data.js?v=10290834"></script>
+<script src="stories.js?v=10290834"></script>
+<script src="engine.js?v=10290834"></script>
+<script src="collab.js?v=10290834"></script>
+<script src="battle.js?v=10290834"></script>
+<script src="multi.js?v=10290834"></script>
+<script src="store.js?v=10290834"></script>
+<script src="cloud.js?v=10290834"></script>
+<script src="app.js?v=10290834"></script>
 </body>
 </html>
