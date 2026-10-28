@@ -179,6 +179,7 @@ body .lib.grid3 button{text-align:center;padding:14px 4px;min-height:64px;displa
 body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11px;color:var(--dim)}
 .card h2.getttl{font-size:24px;font-weight:800;color:var(--acc);letter-spacing:.06em;margin:0 0 10px;text-shadow:0 0 12px #f0b42955}
 .row.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.row.grid2 button{width:100%;min-height:52px;font-size:16px}.row.grid2 button:nth-child(odd):last-child{grid-column:span 2}
+#home h1{position:sticky;top:0;z-index:6;background:var(--bg);margin:0 -16px 8px;padding:calc(10px + env(safe-area-inset-top)) 16px 8px;border-bottom:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -186,7 +187,6 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 <!-- ホーム -->
 <section id="home" class="screen on">
   <h1>📟 バーコードバトラー</h1>
-  <p class="sub">身の回りのバーコードが戦士になる。商品のバーコードを読み取って対戦しよう。</p>
 
   <div class="row" style="align-items:center">
     <select id="profSel" style="flex:2;min-height:44px;border-radius:10px;background:#21262d;color:var(--fg);border:1px solid var(--line);padding:0 10px;font:inherit"></select>
@@ -236,7 +236,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290828</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">版 10290832</div>
 </section>
 
 <!-- お店 -->
@@ -384,14 +384,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10290828"></script>
-<script src="stories.js?v=10290828"></script>
-<script src="engine.js?v=10290828"></script>
-<script src="collab.js?v=10290828"></script>
-<script src="battle.js?v=10290828"></script>
-<script src="multi.js?v=10290828"></script>
-<script src="store.js?v=10290828"></script>
-<script src="cloud.js?v=10290828"></script>
-<script src="app.js?v=10290828"></script>
+<script src="data.js?v=10290832"></script>
+<script src="stories.js?v=10290832"></script>
+<script src="engine.js?v=10290832"></script>
+<script src="collab.js?v=10290832"></script>
+<script src="battle.js?v=10290832"></script>
+<script src="multi.js?v=10290832"></script>
+<script src="store.js?v=10290832"></script>
+<script src="cloud.js?v=10290832"></script>
+<script src="app.js?v=10290832"></script>
 </body>
 </html>
