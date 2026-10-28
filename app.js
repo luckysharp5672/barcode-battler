@@ -1213,6 +1213,7 @@
 
   // 結果：出場した戦士に経験値、お金、まれにアイテム
   const RESERVE_XP = 0.7;
+  const WIN_XP_MULT = 2;                                  // 勝ったときの経験値だけ、さらに2倍
   const REWARD_MULT = 2;                                  // 戦いの報酬（経験値・お金）の倍率
   async function finishMatch() {
     const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
@@ -1222,7 +1223,7 @@
     const avgFoe = known.length ? Math.round(known.reduce((a, f) => a + f.level, 0) / known.length) : 1;
     $('resSub').textContent = match.pvp ? `${match.oppName} さんとの対戦：${match.wins[0]}勝 ${match.wins[1]}敗` : match.maxGames > 1 ? `3本勝負：${match.wins[0]}勝 ${match.wins[1]}敗` : (win ? 'てきのパーティを全員たおした' : draw ? 'どちらも全員が戦えなくなった' : 'パーティが全員たおされた');
     const members = [], boost2 = !!match.boost || player.xp2 === today();
-    const baseXp = (win ? 30 + 5 * avgFoe : 10) * REWARD_MULT * (boost2 ? 2 : 1);
+    const baseXp = (win ? (30 + 5 * avgFoe) * WIN_XP_MULT : 10) * REWARD_MULT * (boost2 ? 2 : 1);
     // 出場した3体は満額、出番のなかった控えは7割
     for (const code of match.codes) {
       const e = dex[code]; if (!e) continue;
@@ -1768,7 +1769,7 @@
     ・ステータスのマーク：❤️ たいりょく／⚔️ こうげき／🛡️ ぼうぎょ／👟 すばやさ（はやい人が先に動く）／✨ とくしゅ（特殊技の強さ）。<br>
     ・スキル：たたかう／クイック（優先度+1）／特殊技（防御無視・必中、3ターンに1回）／ガード（優先度+3、連続不可）／薬草／パワーキー／アイテム。<br>
     ・属性の相性：炎→風→土→雷→水→炎が有利（×1.5）。不利×0.5、同じ属性×0.75。<br>
-    ・戦いのあとに、経験値（参加した3体は全部、控えの3体は7割）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
+    ・戦いのあとに、経験値（参加した3体は全部、控えの3体は7割。勝つと経験値は特に多い）・お金・まれにアイテム（勝ち12%／負け3%）がもらえます。<br>
     ・「ランダム」は、戦士・アイテムそれぞれ1日1回だけです。「🌟 コラボスキャン」は、合言葉を知っている家族だけの特別なキャラです（読み取りのルールは、ふつうのスキャンと同じ）。<br>
     ・「🌐 家族対戦」：家族クラウドにつないでいるユーザー同士で、それぞれの端末で対戦できます。部屋を作る／待っている部屋に入る／部屋コードで入る。毎ターンの入力は45秒、時間切れは自動で「たたかう」。「あきらめる」はあいての勝ち。<br>
     ・「☁ 家族クラウド」：家族コードで、端末をまたいで図鑑・お金・パーティを共有できます（コードは家族以外に教えないでください）。<br>
