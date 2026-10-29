@@ -539,7 +539,7 @@
     }).join('') + '</div>';
   }
   function memberRow(e, inParty, idxs) {
-    const row = document.createElement('div'); row.className = 'prow';
+    const row = document.createElement('div'); row.className = inParty ? 'prow team' : 'prow';
     const th = document.createElement('div'); th.className = 'pth'; row.appendChild(th);
     makeSticker(BB.decode(e.code), 128).then((c) => th.appendChild(c));
     const A = BB.ATTRS[e.attr];
