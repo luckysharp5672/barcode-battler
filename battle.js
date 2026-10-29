@@ -196,7 +196,7 @@
     while (party.length < size && guard++ < 500) {
       let dec = BB.decode(BB.randomCode('char', rng));
       // 強いステージでは、そのレベルまで育てられるキャラ（限界レベルが足りるもの）だけを選ぶ
-      for (let k = 0; k < 40 && dec.limit < avgLv - 2; k++) dec = BB.decode(BB.randomCode('char', rng));
+      for (let k = 0; k < (avgLv > 50 ? 400 : 40) && dec.limit < avgLv - 2; k++) dec = BB.decode(BB.randomCode('char', rng));
       if (idxs.has(dec.idx)) continue;
       idxs.add(dec.idx);
       let it = null;
