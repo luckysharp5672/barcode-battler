@@ -294,7 +294,7 @@
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
     const opts = ids.length
-      ? ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name} ×${player.bag[id]}<br><span class="small">${d.text}</span>`, value: 0, disabled: true }; })
+      ? ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ×${player.bag[id]}<div class="small">${d.text}</div>${heldBy(id) ? '<div><span class="tag">持たせ中</span></div>' : ''}`, value: 0, disabled: true }; })
       : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
     opts.push({ label: '← もどる', value: 0 });
     await choose('持ち物（パーティ編成で持たせられます）', opts);
@@ -484,7 +484,12 @@
       modal(`<div class="mhead"><h2>${title}</h2>${cfg.back ? '<button class="mback" id="mBack">もどる</button>' : ''}</div><div class="lib${cfg.grid ? ' grid3' : ''}" id="choices"></div>`);
       options.forEach((o) => {
         const b = document.createElement('button');
-        b.innerHTML = o.label; b.disabled = !!o.disabled;
+        if (o.thumb) {   // お店のような行：シールの絵＋説明
+          b.className = 'irow';
+          const th = document.createElement('div'); th.className = 'pth'; b.appendChild(th); o.thumb(th);
+          const info = document.createElement('div'); info.className = 'pinfo'; info.innerHTML = o.label; b.appendChild(info);
+        } else b.innerHTML = o.label;
+        b.disabled = !!o.disabled;
         b.onclick = () => { activeChoose = null; closeModal(); res(o.value); };
         $('choices').appendChild(b);
       });
@@ -569,7 +574,7 @@
   }
   async function pickPartyItem(code) {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0 && (!heldBy(id) || heldBy(id) === code));
-    const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { label: `🎁 ${d.name}${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<br><span class="small">${d.text}</span>`, value: id }; }));
+    const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b>${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<div class="small">${d.text}</div>`, value: id }; }));
     opts.push({ label: '← もどる', value: 0 });
     const id = await choose(`${dex[code].name} に持たせるアイテム`, opts);
     if (!id) return;
