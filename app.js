@@ -1255,6 +1255,7 @@
   const RESERVE_XP = 0.7;
   const WIN_XP_MULT = 2;                                  // 勝ったときの経験値だけ、さらに2倍
   const REWARD_MULT = 2;                                  // 戦いの報酬（経験値・お金）の倍率
+  const WIN_MONEY_MULT = 10;                              // 勝ったときのお金だけにかかる倍率（負けたときは変わらない）
   async function finishMatch() {
     const win = match.wins[0] > match.wins[1], draw = match.wins[0] === match.wins[1];
     $('resEmo').textContent = win ? '🏆' : draw ? '🤝' : '💀';
@@ -1274,7 +1275,7 @@
       await Store.saveFighter(cur, e);
       members.push({ name: e.name, oldLv, e, gain, reserve: !played });
     }
-    const gold = BB.rewardMoney(win, avgFoe, rng) * REWARD_MULT;
+    const gold = BB.rewardMoney(win, avgFoe, rng) * REWARD_MULT * (win ? WIN_MONEY_MULT : 1);
     player.money += gold;
     for (const id of match.usedMine) { // 使い切りのアイテムは、持ち物からへる
       player.bag[id] = (player.bag[id] || 1) - 1; if (player.bag[id] <= 0) delete player.bag[id];
