@@ -548,6 +548,7 @@
   // がったい：同じキャラ（属性がちがってもよい）を何体か選んで、このキャラに合わせる。
   // 相手の経験値＋FUSE_BASE がこのキャラに入り、相手は図鑑から消える（パーティにいた場合は、このキャラが代わりに入る）
   const FUSE_BASE = 300;
+  const canFuse = (e) => e.level < e.maxLv && Object.values(dex).some((x) => x.code !== e.code && x.idx === e.idx);
   async function fuseChar(code) {
     const e = dex[code];
     if (!e) return;
