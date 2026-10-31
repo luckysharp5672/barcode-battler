@@ -129,6 +129,7 @@
   function lookup(code, collab) {
     const key = collab ? 'c' + code : code;            // コラボは別の枠（同じバーコードを、通常とコラボで1回ずつ使える）
     if (dex[key]) return { type: 'known', entry: dex[key] };
+    if ((player.fused || []).includes(key)) return { type: 'fused' };   // がったいで使ったバーコードは、もう戦士をつくれない
     const e = Object.values(dex).find((x) => prefixOf(x.code) === prefixOf(key));
     if (!e) return { type: 'new' };
     if (e.lots.includes(key)) return { type: 'lotUsed', entry: e };
@@ -181,6 +182,7 @@
       case 'known': return '';
       case 'lot': return `🎁 おなじキャラ・おなじぞくせい！ ${st.entry.name} の げんかいLv ${st.entry.maxLv} → ${BB.maxLevelOf(st.entry.limit, (st.entry.bonus || 0) + 1)}`;
       case 'upgrade': return `✨ うえのキラキラです！ ${st.entry.name} が ${slots.char.dec ? slots.char.dec.kirakira.name : ''} に なります`;
+      case 'fused': return 'このバーコードは がったいで しようずみです。もう つかえません';
       case 'lotUsed': return `このバーコードは しようずみです。${st.entry.name} を よびだしました`;
       case 'lotMax': return `${st.entry.name} は もう いちばんうえの げんかいLv${BB.MAX_LV}です`;
     }
@@ -574,6 +576,7 @@
       const at = p.members.indexOf(c);
       if (at >= 0) { if (p.members.includes(code)) p.members.splice(at, 1); else p.members[at] = code; }
       if (p.items[c] !== undefined) { if (!p.items[code]) p.items[code] = p.items[c]; delete p.items[c]; }
+      player.fused = [...new Set([...(player.fused || []), c, ...(dex[c].lots || [])])];   // 使ったバーコードは二度と使えない
       delete dex[c]; await Store.removeFighter(cur, c);
     }
     await Store.saveFighter(cur, e); await savePlayer();
