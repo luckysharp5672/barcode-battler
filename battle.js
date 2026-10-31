@@ -87,7 +87,7 @@
         ev.push({ t: 'msg', text: `${u.name} は身を守っている！` });
       } else if (sk.kind === 'dmg' || sk.kind === 'sp') {
         if (!alive(d)) continue;
-        if (d.protect) { ev.push({ t: 'msg', text: `${d.name} は攻撃を防いだ！` }); continue; }
+        if (d.protect) { ev.push({ t: 'block', s: 1 - s, name: d.name }); continue; }
         if (sk.kind === 'dmg' && !BB.rollHit(u, d, rng)) { ev.push({ t: 'miss', s }); continue; }
         let dmg, mult, crit = false;
         if (sk.kind === 'sp') {

@@ -92,8 +92,8 @@
         if (!alive(fighterAt(st, 1 - s, ts))) ts = 1 - ts;
         const d = fighterAt(st, 1 - s, ts);
         if (!alive(d)) continue;
-        if (d.protect) { ev.push({ t: 'msg', text: `${d.name} は攻撃を防いだ！` }); continue; }
-        if (sk.kind === 'dmg' && !BB.rollHit(u, d, rng)) { ev.push({ t: 'miss', s, slot: k }); continue; }
+        if (d.protect) { ev.push({ t: 'block', s: 1 - s, slot: ts, name: d.name }); continue; }
+        if (sk.kind === 'dmg' && !BB.rollHit(u, d, rng)) { ev.push({ t: 'miss', s, slot: k, ds: 1 - s, dslot: ts }); continue; }
         let dmg, mult, crit = false;
         if (sk.kind === 'sp') {
           ({ dmg, mult } = BB.specialDamage(u, d, ATTACK_TIMING)); u.spCd = BB.SP_COOLDOWN;

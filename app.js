@@ -1023,7 +1023,8 @@
           say(`${sideName(e.s)}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
           view.active[e.s] = e.idx; view.seen[e.s].add(e.idx); renderBattle(); await sleep(700); break;
         case 'use': say(`${e.who} の ${e.skill}！`); await sleep(450); break;
-        case 'miss': say('しかし攻撃は外れた！'); await sleep(500); break;
+        case 'miss': say('しかし攻撃は外れた！'); await flashSide(1 - e.s, 'ミス！', '#c9d1d9'); break;
+        case 'block': say(`${e.name} は攻撃を防いだ！`); await flashSide(e.s, 'ガード', '#58a6ff'); break;
         case 'msg': say(e.text); await sleep(600); break;
         case 'dmg':
           view.hp[e.s][e.idx] = e.hp;
@@ -1173,7 +1174,8 @@
           say2(`${e.s === 0 ? 'あなた' : 'てき'}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
           mview.field[e.s][e.slot] = e.idx; mview.seen[e.s].add(e.idx); renderMulti(); await sleep(700); break;
         case 'use': say2(`${e.who} の ${e.skill}！`); await sleep(420); break;
-        case 'miss': say2('しかし攻撃は外れた！'); await sleep(450); break;
+        case 'miss': say2('しかし攻撃は外れた！'); await flashSlot(e.ds, e.dslot, 'ミス！', '#c9d1d9'); break;
+        case 'block': say2(`${e.name} は攻撃を防いだ！`); await flashSlot(e.s, e.slot, 'ガード', '#58a6ff'); break;
         case 'msg': say2(e.text); await sleep(550); break;
         case 'dmg':
           mview.hp[e.s][e.idx] = e.hp;
