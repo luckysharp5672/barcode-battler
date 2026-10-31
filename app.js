@@ -1044,11 +1044,12 @@
   }
 
   // 自分の行動を決める（スキル／交代）
-  // こうたい候補の表示：属性（アイテムで変わる「攻」「体」の属性も）と、持っているアイテム
+  // こうたい候補の表示：1行目＝属性・名前・Lv・HP、2行目＝アイテム名・こうげき/ぼうぎょ・アイテムの属性
   function benchLabel(f, hp) {
-    const A = BB.ATTRS[f.attr];
-    const atk = f.atkAttr !== f.attr ? ` 攻:${BB.ATTRS[f.atkAttr].emoji}${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? ` 体:${BB.ATTRS[f.bodyAttr].emoji}${BB.ATTRS[f.bodyAttr].name}` : '';
-    return `<b>${A.emoji} ${f.name}</b> Lv${f.level}　❤️ ${hp}/${f.maxHp}<div class="small">${A.name}ぞくせい${atk}${body}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`;
+    const A = BB.ATTRS[f.attr], it = f.item, ef = it && it.effect;
+    const el = ef && ef.element ? BB.ATTRS[BB.ATTR_OF_KEY[ef.element]] : null;
+    const line2 = it ? `🎁 ${kanaItem(it.name)}${el ? `　${ef.slot === 'weapon' ? 'こうげき' : 'ぼうぎょ'}${el.emoji}` : ''}` : '';
+    return `<b>${A.emoji} ${f.name}</b> Lv${f.level}　❤️ ${hp}/${f.maxHp}${line2 ? `<div class="small">${line2}</div>` : ''}`;
   }
   async function pickBench(title, canCancel) {
     const side = st.sides[mySide];
