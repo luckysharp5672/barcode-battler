@@ -545,6 +545,40 @@
       return `<div class="mb"><span>${n}</span><i style="${tier ? 'background:' + COL[tier - 1] : ''}"><u style="width:${w}%;background:${COL[tier]}"></u></i><b>${b}${dt}</b></div>`;
     }).join('') + '</div>';
   }
+  // 合体：同じキャラ（属性がちがってもよい）を何体か選んで、このキャラに合わせる。
+  // 相手の経験値＋FUSE_BASE がこのキャラに入り、相手は図鑑から消える（パーティにいた場合は、このキャラが代わりに入る）
+  const FUSE_BASE = 300;
+  async function fuseChar(code) {
+    const e = dex[code];
+    if (!e) return;
+    const mates = Object.values(dex).filter((x) => x.code !== code && x.idx === e.idx).sort((a, b) => b.xp - a.xp);
+    if (!mates.length) { await choose('合体', [{ label: `合体できる「${e.name}」がいません。<br>同じキャラ（属性がちがってもOK）がもう1体いると合体できます`, value: 0, disabled: true }], { back: { value: 0 } }); return; }
+    if (e.level >= e.maxLv) { await choose('合体', [{ label: `${e.name}は、げんかいLv${e.maxLv}に達しています。<br>げんかいLvを上げてから合体してください`, value: 0, disabled: true }], { back: { value: 0 } }); return; }
+    const sel = new Set();
+    const gainOf = () => [...sel].reduce((s, c) => s + dex[c].xp + FUSE_BASE, 0);
+    for (;;) {
+      const nxt = BB.levelFromXp(e.xp + gainOf(), e.maxLv);
+      const opts = [{ label: sel.size ? `<b>✨ ${sel.size}体と合体する</b><div class="small">Lv${e.level} → Lv${nxt}${nxt >= e.maxLv ? '（げんかい）' : ''}　※ えらんだ戦士は、いなくなります</div>` : '<span class="small">合体する戦士を、タップでえらんでください（何体でも）</span>', value: 'go', disabled: !sel.size }];
+      mates.forEach((m) => opts.push({ thumb: (th) => makeSticker(BB.decode(m.code), 128).then((c) => th.appendChild(c)),
+        label: `<b>${sel.has(m.code) ? '✅' : '⬜'} ${BB.ATTRS[m.attr].emoji} ${m.name}</b> Lv${m.level}<div class="small">経験値 +${m.xp + FUSE_BASE}${player.party.members.includes(m.code) ? ' ／ パーティにいます' : ''}</div>`, value: m.code }));
+      const r = await choose(`${e.name}（Lv${e.level}）と合体`, opts, { back: { value: null } });
+      if (r === null) return;
+      if (r === 'go') break;
+      sel.has(r) ? sel.delete(r) : sel.add(r);
+    }
+    const used = [...sel];
+    e.xp += gainOf(); e.level = BB.levelFromXp(e.xp, e.maxLv);
+    const p = player.party;
+    for (const c of used) {
+      const at = p.members.indexOf(c);
+      if (at >= 0) { if (p.members.includes(code)) p.members.splice(at, 1); else p.members[at] = code; }
+      if (p.items[c] !== undefined) { if (!p.items[code]) p.items[code] = p.items[c]; delete p.items[c]; }
+      delete dex[c]; await Store.removeFighter(cur, c);
+    }
+    await Store.saveFighter(cur, e); await savePlayer();
+    await choose('合体せいこう！', [{ label: `<b>${e.name}</b> は Lv${e.level}/${e.maxLv} になりました`, value: 0, disabled: true }], { back: { value: 0 } });
+    renderParty();
+  }
   function memberRow(e, inParty, idxs) {
     const row = document.createElement('div'); row.className = inParty ? 'prow team' : 'prow';
     const th = document.createElement('div'); th.className = 'pth'; row.appendChild(th);
@@ -559,10 +593,12 @@
     if (inParty) {
       mk('📋 詳細', () => showDetailModal(e.code));
       mk('🎁 アイテム', () => pickPartyItem(e.code));
+      mk('🔗 合体', () => fuseChar(e.code));
       mk('外す', async () => { player.party.members = player.party.members.filter((c) => c !== e.code); delete player.party.items[e.code]; await savePlayer(); renderParty(); });
     } else {
       const dup = idxs.has(e.idx), full = partyCodes().length >= PARTY_MAX;
       mk('📋 詳細', () => showDetailModal(e.code));
+      mk('🔗 合体', () => fuseChar(e.code));
       mk(dup ? '同じキャラがいる' : full ? '満員' : '追加', async () => { player.party.members.push(e.code); await savePlayer(); renderParty(); }, dup || full);
     }
     return row;
