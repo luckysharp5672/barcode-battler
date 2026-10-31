@@ -305,7 +305,7 @@
       ? ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ×${player.bag[id]}<div class="small">${d.text}</div>${heldBy(id) ? '<div><span class="tag">持たせ中</span></div>' : ''}`, value: 0, disabled: true }; })
       : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
     opts.push({ label: '← もどる', value: 0 });
-    await choose('持ち物（パーティ編成で持たせられます）', opts);
+    await choose('持ち物（パーティ編成で持たせられます）', opts, { home: true });
   }
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
@@ -336,6 +336,7 @@
     $('libMask').classList.add('on');
   }
   $('libClose').onclick = () => $('libMask').classList.remove('on');
+  $('libHome').onclick = () => { $('libMask').classList.remove('on'); show('home'); };
 
   // カメラスキャン。ブラウザの BarcodeDetector（Android Chrome など）があればそれを使い、
   // 無ければ同梱の ZXing（vendor/zxing-library.min.js）で読み取る（PCのChrome・iPhoneなど）。HTTPS/localhost が必要
@@ -490,7 +491,7 @@
     return new Promise((res, rej) => {
       if (turnExpired) { rej(new Error('timeout')); return; }   // 通信対戦：入力の時間が切れたあとは、開かない
       activeChoose = { rej };
-      modal(`<div class="mhead"><h2>${title}</h2>${cfg.back ? '<button class="mback" id="mBack">もどる</button>' : ''}</div><div class="lib${cfg.grid ? ' grid3' : ''}" id="choices"></div>`);
+      modal(`<div class="mhead"><h2>${title}</h2>${cfg.back ? '<button class="mback" id="mBack">もどる</button>' : ''}${cfg.home ? '<button class="mback pri" id="mHome">ホームへ</button>' : ''}</div><div class="lib${cfg.grid ? ' grid3' : ''}" id="choices"></div>`);
       options.forEach((o) => {
         const b = document.createElement('button');
         if (o.thumb) {   // お店のような行：シールの絵＋説明
@@ -502,6 +503,7 @@
         b.onclick = () => { activeChoose = null; closeModal(); res(o.value); };
         $('choices').appendChild(b);
       });
+      if (cfg.home) $('mHome').onclick = () => { activeChoose = null; closeModal(); show('home'); res(0); };
       if (cfg.back) $('mBack').onclick = () => { activeChoose = null; closeModal(); res(cfg.back.value); };
     });
   }
