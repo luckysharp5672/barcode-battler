@@ -1044,11 +1044,17 @@
   }
 
   // 自分の行動を決める（スキル／交代）
+  // こうたい候補の表示：属性（アイテムで変わる「攻」「体」の属性も）と、持っているアイテム
+  function benchLabel(f, hp) {
+    const A = BB.ATTRS[f.attr];
+    const atk = f.atkAttr !== f.attr ? ` 攻:${BB.ATTRS[f.atkAttr].emoji}${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? ` 体:${BB.ATTRS[f.bodyAttr].emoji}${BB.ATTRS[f.bodyAttr].name}` : '';
+    return `<b>${A.emoji} ${f.name}</b> Lv${f.level}　❤️ ${hp}/${f.maxHp}<div class="small">${A.name}ぞくせい${atk}${body}${f.item ? ' ／ 🎁' + f.item.name : ''}</div>`;
+  }
   async function pickBench(title, canCancel) {
     const side = st.sides[mySide];
     const opts = Battle.benchAlive(side).map((i) => {
       const f = side.party[i];
-      return { label: `${BB.ATTRS[f.attr].emoji} ${f.name} Lv${f.level}　❤️ ${view.hp[mySide][i]}/${f.maxHp}`, value: i };
+      return { label: benchLabel(f, view.hp[mySide][i]), value: i };
     });
     if (canCancel) opts.push({ label: '← もどる', value: -1 });
     opts.push({ label: '🏳 あきらめる', value: -2 });
@@ -1215,7 +1221,7 @@
       } else if (top === 'switch') {
         const to = await choose('だれとこうたいする？', bench.map((i) => {
           const m = st.sides[0].party[i];
-          return { label: `${BB.ATTRS[m.attr].emoji} ${m.name} Lv${m.level}　❤️ ${mview.hp[0][i]}/${m.maxHp}`, value: i + 1 };
+          return { label: benchLabel(m, mview.hp[0][i]), value: i + 1 };
         }).concat([{ label: '← もどる', value: 0 }]));
         if (to) { taken.add(to - 1); return { type: 'switch', to: to - 1 }; }
       }
