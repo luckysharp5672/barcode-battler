@@ -594,12 +594,12 @@
     if (inParty) {
       mk('📋 詳細', () => showDetailModal(e.code));
       mk('🎁 アイテム', () => pickPartyItem(e.code));
-      mk('🔗 がったい', () => fuseChar(e.code));
+      mk('がったい', () => fuseChar(e.code), !canFuse(e));
       mk('外す', async () => { player.party.members = player.party.members.filter((c) => c !== e.code); delete player.party.items[e.code]; await savePlayer(); renderParty(); });
     } else {
       const dup = idxs.has(e.idx), full = partyCodes().length >= PARTY_MAX;
       mk('📋 詳細', () => showDetailModal(e.code));
-      mk('🔗 がったい', () => fuseChar(e.code));
+      mk('がったい', () => fuseChar(e.code), !canFuse(e));
       mk(dup ? '同じキャラがいる' : full ? '満員' : '追加', async () => { player.party.members.push(e.code); await savePlayer(); renderParty(); }, dup || full);
     }
     return row;
