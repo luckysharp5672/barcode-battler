@@ -70,6 +70,12 @@
       if (e.bonus === undefined) e.bonus = e.lots.length;       // 限界レベルを上げた回数（1回で+10）
       e.maxLv = BB.maxLevelOf(d.limit, e.bonus);
       e.level = Math.min(e.level || 1, e.maxLv);
+      // レア度ごとの初期レベルが決まる前に入手したキャラも、初期レベルに引き上げる（経験値も合わせる）
+      const lv0 = Math.min(d.kirakira.startLv, e.maxLv);
+      if (e.level < lv0 || e.xp < BB.xpForLevel(lv0)) {
+        e.level = Math.max(e.level, lv0); e.xp = Math.max(e.xp, BB.xpForLevel(e.level));
+        Store.saveFighter(cur, e);
+      }
     });
     // 45と49で同じ戦士になった重複は、経験値が多い方を残す
     const seen = {};
