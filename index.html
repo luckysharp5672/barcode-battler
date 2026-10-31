@@ -120,7 +120,8 @@ video{display:block;width:100%;border-radius:10px;background:#000;aspect-ratio:4
 .dtrack.xp>div{background:linear-gradient(90deg,#3fb950,#a3e635)}
 .dsk{padding:5px 0;border-top:1px solid var(--line);font-size:14px}
 #detailBox h3{margin:10px 0 2px;font-size:13px;color:var(--dim)}
-#timeline{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;min-height:0;margin-bottom:8px}
+#timeline,#timeline2{display:flex;flex-direction:column;align-items:stretch;gap:6px;min-height:84px;margin-bottom:12px}#timeline2{min-height:0}
+#timeline .tl,#timeline2 .tl{border-radius:10px;font-size:14px;padding:8px 12px}
 .tl{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid var(--line);background:var(--panel);animation:rin .4s both}
 .tl.me{border-color:var(--me)}.tl.foe{border-color:var(--foe)}
 .tl em{font-style:normal;color:var(--dim);font-size:11px}
@@ -240,7 +241,7 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
     <div class="row" id="cloudBtns"></div>
   </div>
   <div class="small" id="diag" style="margin:8px 0;color:var(--hp3);word-break:break-all"></div>
-  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">ばん 10311448</div>
+  <div class="small" style="margin:4px 0 16px;text-align:center;color:var(--dim)">ばん 10311504</div>
 </section>
 
 <!-- お店 -->
@@ -320,10 +321,9 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 <!-- 対戦 -->
 <section id="battle" class="screen">
   <div class="btop"><div class="starline" id="starLine"></div><div class="ringref" data-attrring="64" title="属性の相性（タップで大きく）"></div></div>
-  <div id="timeline"></div>
   <div class="small" id="turnTimer" style="text-align:center;min-height:18px"></div>
   <div class="card fighter" id="foeCard"></div>
-  <div class="log" id="log"></div>
+  <div id="timeline"></div><div class="log" id="log" style="display:none"></div>
   <div class="card fighter" id="meCard"></div>
   <div class="acts" id="acts"></div>
 </section>
@@ -331,10 +331,9 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
 <!-- マルチバトル（場に2体） -->
 <section id="battle2" class="screen">
   <div class="btop"><div class="starline" id="starLine2"></div><div class="ringref" data-attrring="64" title="属性の相性（タップで大きく）"></div></div>
-  <div id="timeline2"></div>
   <div class="mrow" id="mFoe"></div>
   <div class="small mbench" id="mFoeBench"></div>
-  <div class="log" id="log2"></div>
+  <div id="timeline2"></div><div class="log" id="log2" style="display:none"></div>
   <div class="mrow" id="mMe"></div>
   <div class="small mbench" id="mMeBench"></div>
 </section>
@@ -386,14 +385,14 @@ body .lib.grid3 .big{font-size:20px;line-height:1.2}.lib.grid3 .why{font-size:11
   window.addEventListener('error', function (e) { __showErr((e.message || 'エラー') + ' (' + String(e.filename || '').split('/').pop().split('?')[0] + ':' + e.lineno + ')'); });
   window.addEventListener('unhandledrejection', function (e) { __showErr('非同期のエラー：' + ((e.reason && (e.reason.message || e.reason.code)) || e.reason)); });
 </script>
-<script src="data.js?v=10311448"></script>
-<script src="stories.js?v=10311448"></script>
-<script src="engine.js?v=10311448"></script>
-<script src="collab.js?v=10311448"></script>
-<script src="battle.js?v=10311448"></script>
-<script src="multi.js?v=10311448"></script>
-<script src="store.js?v=10311448"></script>
-<script src="cloud.js?v=10311448"></script>
-<script src="app.js?v=10311448"></script>
+<script src="data.js?v=10311504"></script>
+<script src="stories.js?v=10311504"></script>
+<script src="engine.js?v=10311504"></script>
+<script src="collab.js?v=10311504"></script>
+<script src="battle.js?v=10311504"></script>
+<script src="multi.js?v=10311504"></script>
+<script src="store.js?v=10311504"></script>
+<script src="cloud.js?v=10311504"></script>
+<script src="app.js?v=10311504"></script>
 </body>
 </html>

@@ -1015,7 +1015,7 @@
     for (const e of events) {
       switch (e.t) {
         case 'order': { // 行動順のタイムライン：交代 → 優先度の高いスキル → DX
-          $('timeline').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === mySide ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${i + 1}. ${sideName(x.s)}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・👟${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
+          $('timeline').innerHTML = e.list.map((x, i) => ({ x, i })).sort((a, b) => (b.x.s !== mySide) - (a.x.s !== mySide) || a.i - b.i).map(({ x, i }) => `<span class="tl ${x.s === mySide ? 'me' : 'foe'}" style="animation-delay:${i * 0.25}s">${x.s === mySide ? 'みかた' : 'てき'}：${x.label}${x.kind === 'skill' ? ` <em>優先度${x.pri > 0 ? '+' : ''}${x.pri}・👟${x.dx}</em>` : ' <em>先に交代</em>'}</span>`).join('');
           e.list.forEach((x) => view.hist[x.s].push(x.label));
           renderBattle(); await sleep(500 + e.list.length * 350); break;
         }
@@ -1048,7 +1048,7 @@
   function benchLabel(f, hp) {
     const A = BB.ATTRS[f.attr], it = f.item, ef = it && it.effect;
     const el = ef && ef.element ? BB.ATTRS[BB.ATTR_OF_KEY[ef.element]] : null;
-    const line2 = it ? `🎁 ${kanaItem(it.name)}${el ? `　${ef.slot === 'weapon' ? 'こうげき' : 'ぼうぎょ'}${el.emoji}` : ''}` : '';
+    const line2 = it ? `🎁 ${kanaItem(it.name)}${el ? `${el.emoji}${ef.slot === 'weapon' ? 'こうげき' : 'ぼうぎょ'}` : ''}` : '';
     return `<b>${A.emoji} ${f.name}</b> Lv${f.level}　❤️ ${hp}/${f.maxHp}${line2 ? `<div class="small">${line2}</div>` : ''}`;
   }
   async function pickBench(title, canCancel) {
@@ -1167,7 +1167,7 @@
     for (const e of events) {
       switch (e.t) {
         case 'order':
-          $('timeline2').innerHTML = e.list.map((x, i) => `<span class="tl ${x.s === 0 ? 'me' : 'foe'}" style="animation-delay:${i * 0.2}s">${i + 1}. ${x.s === 0 ? '' : 'てき '}${x.name}：${x.label}</span>`).join('');
+          $('timeline2').innerHTML = e.list.map((x, i) => ({ x, i })).sort((a, b) => (b.x.s !== 0) - (a.x.s !== 0) || a.i - b.i).map(({ x, i }) => `<span class="tl ${x.s === 0 ? 'me' : 'foe'}" style="animation-delay:${i * 0.2}s">${x.s === 0 ? 'みかた ' : 'てき '}${x.name}：${x.label}</span>`).join('');
           await sleep(400 + e.list.length * 250); break;
         case 'switch':
           say2(`${e.s === 0 ? 'あなた' : 'てき'}は ${e.from ? e.from + ' を戻して ' : ''}${e.to} を出した！`);
