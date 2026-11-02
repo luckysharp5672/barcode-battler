@@ -1025,6 +1025,7 @@
         case 'use': say(`${e.who} の ${e.skill}！`); await sleep(450); break;
         case 'miss': say('しかし攻撃は外れた！'); await flashSide(1 - e.s, 'ミス！', '#c9d1d9'); break;
         case 'block': say(`${e.name} は攻撃を防いだ！`); await flashSide(e.s, 'ガード', '#58a6ff'); break;
+        case 'trait': await flashSide(e.s, e.text + '！', '#f0b429'); break;
         case 'msg': say(e.text); await sleep(600); break;
         case 'dmg':
           view.hp[e.s][e.idx] = e.hp;
@@ -1096,7 +1097,7 @@
   // 1試合の対戦。勝者（0=自分 1=相手 -1=引き分け）を返す
   async function runBattle(mineList, foeList) {
     mySide = 0;
-    st = Battle.createBattle(Battle.createSide('あなた', mineList, match.herbs), Battle.createSide('てき', foeList));
+    st = Battle.createBattle(Battle.createSide('あなた', mineList, match.herbs), Battle.createSide('てき', foeList), match.game);
     view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: [match.herbs, 3], seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
     $('starLine').textContent = '相性：矢印の元の属性が、先に強い（×1.5）。同じ属性は ×0.75。図をタップで大きく表示 →';
@@ -1176,6 +1177,7 @@
         case 'use': say2(`${e.who} の ${e.skill}！`); await sleep(420); break;
         case 'miss': say2('しかし攻撃は外れた！'); await flashSlot(e.ds, e.dslot, 'ミス！', '#c9d1d9'); break;
         case 'block': say2(`${e.name} は攻撃を防いだ！`); await flashSlot(e.s, e.slot, 'ガード', '#58a6ff'); break;
+        case 'trait': await flashSlot(e.s, e.slot, e.text + '！', '#f0b429'); break;
         case 'msg': say2(e.text); await sleep(550); break;
         case 'dmg':
           mview.hp[e.s][e.idx] = e.hp;
@@ -1233,7 +1235,7 @@
   // マルチの1試合。勝者（0=自分 1=相手 -1=引き分け）を返す
   async function runMultiBattle(mineList, foeList) {
     mySide = 0;
-    st = Multi.createBattle(Multi.createSide('あなた', mineList, match.herbs), Multi.createSide('てき', foeList));
+    st = Multi.createBattle(Multi.createSide('あなた', mineList, match.herbs), Multi.createSide('てき', foeList), match.game);
     mview = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), field: [[0, 1], [0, 1]], herbs: [match.herbs, 3], seen: [new Set([0, 1]), new Set([0, 1])] };
     logLines = []; $('timeline2').innerHTML = ''; $('log2').innerHTML = '';
     $('starLine2').textContent = '相性：矢印の元の属性が、先に強い（×1.5）。同じ属性は ×0.75。図をタップで大きく表示 →';
@@ -1563,7 +1565,7 @@
     const g = match.game, me = mySide, opp = 1 - me;
     const lists = me === 0 ? [mineList, foeList] : [foeList, mineList];
     const herbs = me === 0 ? [match.herbs, oppHerbs] : [oppHerbs, match.herbs];
-    st = Battle.createBattle(Battle.createSide(pvp.hostName, lists[0], herbs[0]), Battle.createSide(pvp.guestName, lists[1], herbs[1]));
+    st = Battle.createBattle(Battle.createSide(pvp.hostName, lists[0], herbs[0]), Battle.createSide(pvp.guestName, lists[1], herbs[1]), match.game);
     view = { hp: st.sides.map((sd) => sd.party.map((f) => f.hp)), active: [0, 0], herbs: herbs.slice(), seen: [new Set([0]), new Set([0])], hist: [[], []] };
     logLines = []; $('timeline').innerHTML = ''; $('log').innerHTML = '';
     $('starLine').textContent = '相性：矢印の元の属性が、先に強い（×1.5）。同じ属性は ×0.75。図をタップで大きく表示 →';

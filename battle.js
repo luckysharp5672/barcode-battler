@@ -25,7 +25,9 @@
   function createSide(name, fighters, herbs = 3) {
     return { name, party: fighters, active: 0, herbs, lastGuard: false, usedItems: [] };
   }
-  function createBattle(a, b) { return { sides: [a, b], round: 0, over: false, winner: null }; }
+  function createBattle(a, b, game) { return { sides: [a, b], round: 0, over: false, winner: null, game: game || 1 }; }
+  // こうげきふうじ：あいてがもっていると、こちらの技の優先度は0として扱われる
+  const effPri = (st, s, sk) => (actOf(st, 1 - s).trait === 'seal' ? 0 : sk.pri);
 
   // いま選べるスキル（無効なものには理由つき）
   function availableSkills(st, s) {
@@ -57,13 +59,13 @@
       const side = st.sides[s];
       if (!benchAlive(side).includes(a.to)) continue;
       const from = actOf(st, s);
-      side.active = a.to; side.lastGuard = false;
+      side.active = a.to; side.lastGuard = false; BB.onSwitchIn(actOf(st, s));
       ev.push({ t: 'switch', s, from: from.name, to: actOf(st, s).name, idx: a.to });
     }
 
     // 2. スキル：優先度 → DX の順
     const order = [0, 1].filter((s) => actions[s].type === 'skill').map((s) => ({
-      s, pri: SKILLS[actions[s].skill].pri, dx: actOf(st, s).dx, r: rng(),
+      s, pri: effPri(st, s, SKILLS[actions[s].skill]), dx: actOf(st, s).dx, r: rng(),
     })).sort((x, y) => y.pri - x.pri || y.dx - x.dx || x.r - y.r);
 
     // 行動順の記録（画面のタイムライン用）：交代 → 優先度の高いスキル → DX
@@ -81,24 +83,32 @@
       if (!avail || avail.off) { ev.push({ t: 'msg', text: `${u.name} の ${sk.name}… しかしうまくいかなかった！` }); side.lastGuard = false; continue; }
       ev.push({ t: 'use', s, who: u.name, skill: sk.name });
       if (sk.kind !== 'guard') side.lastGuard = false;
+      if (sk.kind !== 'dmg' && sk.kind !== 'sp') u.tr.last = '';
 
       if (sk.kind === 'guard') {
         u.protect = true; side.lastGuard = true;
         ev.push({ t: 'msg', text: `${u.name} は身を守っている！` });
       } else if (sk.kind === 'dmg' || sk.kind === 'sp') {
         if (!alive(d)) continue;
-        if (d.protect) { ev.push({ t: 'block', s: 1 - s, name: d.name }); continue; }
+        const tr0 = BB.beginAttack(u, sk.id);
+        if (d.protect) { BB.onBlock(d); ev.push({ t: 'block', s: 1 - s, name: d.name }); continue; }
         if (sk.kind === 'dmg' && !BB.rollHit(u, d, rng)) { ev.push({ t: 'miss', s }); continue; }
         let dmg, mult, crit = false;
         if (sk.kind === 'sp') {
-          ({ dmg, mult } = BB.specialDamage(u, d, ATTACK_TIMING)); u.spCd = BB.SP_COOLDOWN;
+          ({ dmg, mult } = BB.specialDamage(u, d, ATTACK_TIMING)); u.spCd = BB.spCooldown(u);
         } else {
           ({ dmg, mult } = BB.calcDamage(u, d, ATTACK_TIMING * sk.power, rng));
           if (rng() < CRIT_RATE) { crit = true; dmg = Math.round(dmg * 1.5); }
         }
-        dmg = Math.max(1, Math.round(dmg * fat));
+        const tm = BB.traitMult(u, d, sk.kind, mult, tr0, st.game);
+        dmg = Math.max(1, Math.round(dmg * fat * tm.k));
+        if (u.trait === 'tome') dmg = Math.max(dmg, Math.round(d.hp / 3));
+        const gt = BB.guts(d, dmg); dmg = gt.dmg;
+        if (tm.atk.length) ev.push({ t: 'trait', s, text: BB.traitNames(tm.atk) });
+        if (tm.def.length || gt.saved) ev.push({ t: 'trait', s: 1 - s, text: BB.traitNames(gt.saved ? tm.def.concat('fukutsu') : tm.def) });
         d.hp = Math.max(0, d.hp - dmg);
         ev.push({ t: 'dmg', s: 1 - s, idx: st.sides[1 - s].active, dmg, hp: d.hp, mult, crit });
+        if (BB.afterHit(u, d, rng).thorn) { ev.push({ t: 'trait', s: 1 - s, text: BB.TRAITS.thorn.name }); ev.push({ t: 'status', s, name: u.name, status: 'poison' }); }
         if (sk.kind === 'dmg') for (const k of BB.tryInflict(u, d, rng)) ev.push({ t: 'status', s: 1 - s, name: d.name, status: k });
       } else if (sk.kind === 'herb' || sk.kind === 'power') {
         side.herbs--;
@@ -125,6 +135,10 @@
         ev.push({ t: 'poison', s, idx: st.sides[s].active, dmg: p, hp: f.hp, name: f.name });
       }
     }
+    for (const s of [0, 1]) {
+      const f = actOf(st, s), n = BB.endTurnTraits(f);
+      if (n) { ev.push({ t: 'trait', s, text: BB.TRAITS.ketsueki.name }); ev.push({ t: 'heal', s, idx: st.sides[s].active, amount: n, hp: f.hp }); }
+    }
     // 特殊技の待ち時間：使うと3、ターンの終わりごとに1ずつ減る（全員）
     for (const side of st.sides) for (const f of side.party) if (f.spCd > 0) f.spCd--;
 
@@ -146,7 +160,7 @@
   function replaceActive(st, s, to) {
     const side = st.sides[s];
     if (!benchAlive(side).includes(to)) return null;
-    side.active = to; side.lastGuard = false;
+    side.active = to; side.lastGuard = false; BB.onSwitchIn(actOf(st, s));
     return { t: 'switch', s, from: '', to: actOf(st, s).name, idx: to };
   }
 

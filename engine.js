@@ -85,6 +85,7 @@
     for (const [k, v] of Object.entries(e.inflict || {})) p.push(`${STATUS[k]}${v}%`);
     for (const [k, v] of Object.entries(e.resist || {})) p.push(`${AJ[ATTR_OF_KEY[k]]}ダメージ-${v}%`);
     if ((e.immune || []).length) p.push(e.immune.map((s) => STATUS[s]).join('・') + 'むこう');
+    if (e.trait && TRAITS[e.trait]) p.push(`【${TRAITS[e.trait].name}】${TRAITS[e.trait].text}`);
     return p.join('、') || '-';
   }
 
@@ -109,7 +110,7 @@
       return { ...base, idx, id: c.id, name: c.name, breed: c.breed, role: c.role, type: c.type, init: c.init, growth: c.growth,
         attr: g(9) % 5, kirakira: kk, limit: kk.limit, kk: g(7) * 10 + g(8) };
     }
-    const it = DATA.items[(g(5) * 100 + g(6) * 10 + g(7)) % DATA.items.length];
+    const it = DATA.items[itemIndexOf(g(5) * 100 + g(6) * 10 + g(7))];
     return { ...base, itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) };
   }
 
@@ -168,6 +169,7 @@
       ...dec, level, atkAttr: dec.attr, bodyAttr: dec.attr,
       herbs: 3, spCd: 0, status: { poison: 0, stun: 0 }, item: item || null,
       resist: {}, immune: [], inflict: {}, consumable: null,
+      trait: (e && e.trait) || '', tr: { fresh: true, hon: 0, gr: false, combo: 0, last: '', revenge: false, chase: false, used: false, stunN: 0 },
     };
     if (e && e.kind === 'equipment') {
       for (const [k, v] of Object.entries(e.bonus)) st[k] = Math.max(1, st[k] + v);
@@ -216,7 +218,11 @@
     const got = [];
     for (const [k, pct] of Object.entries(a.inflict)) {
       if (d.immune.includes(k) || d.status[k] === undefined || d.status[k] > 0) continue;
-      if (rng() * 100 < pct) { d.status[k] = k === 'poison' ? 3 : 1; got.push(k); }
+      if (k === 'stun' && d.trait === 'stunproof' && d.tr.stunN >= 1) continue;   // ふみんのこころ：まひは1回目だけ
+      if (rng() * 100 < pct) {
+        d.status[k] = k === 'poison' ? 3 : 1; got.push(k);
+        if (k === 'stun') { if (d.trait === 'stunproof') d.tr.stunN++; if (d.trait === 'mahi') d.tr.revenge = true; }
+      }
     }
     return got;
   }
@@ -233,11 +239,11 @@
   const fatigue = (round) => (round <= 20 ? 1 : 1 + (round - 20) * 0.15);
 
   // 薬草 n 個の回復（1個=最大HPの20%）
-  function healAmount(f, n) { return Math.min(f.maxHp - f.hp, Math.round((f.maxHp * n * 2) / 10)); }
+  function healAmount(f, n) { return Math.min(f.maxHp - f.hp, Math.round((f.maxHp * n * 2) / 10 * (f.trait === 'brave' ? 1.5 : 1))); }
   // パワーキー：薬草1個。乱数(1,2,3,5,7)とタイミング(1〜1.4)で最大HPの10〜98%
   function powerHeal(f, timing, rng) {
     const r = [1, 2, 3, 5, 7][Math.floor(rng() * 5)];
-    const v = (f.maxHp * r * Math.min(1.4, Math.max(1, timing))) / 10;
+    const v = (f.maxHp * r * Math.min(1.4, Math.max(1, timing))) / 10 * (f.trait === 'brave' ? 1.5 : 1);
     return { amount: Math.min(f.maxHp - f.hp, Math.round(v)), r };
   }
   // 消耗品アイテムを使う（1回だけ）
@@ -249,6 +255,102 @@
     if (c.heal_mp) f.spCd = 0;
     f.consumable = null;
     return healed;
+  }
+
+  // ---- アイテムの特性（1つのアイテムに1つ。戦闘のしくみは battle.js / multi.js が、ここの関数をよぶ） ----
+  const TRAITS = {
+    zekkyo: { name: 'ぜっきょう', text: 'HPが 1/5 いかだと、こうげきが3ばい' },
+    nigate_kaeshi: { name: 'にがてきりかえし', text: 'にがてなぞくせいのあいてに、とくしゅが3ばい' },
+    tome: { name: 'とどめのいちげき', text: 'ダメージが、あいてののこりHPの 1/3 より ちいさいとき、1/3 になる' },
+    girigiri: { name: 'ぎりぎりガード', text: 'HPが 1/5 いかだと、うけるダメージがはんぶん' },
+    fukutsu: { name: 'ふくつ', text: 'ひんしになるいちげきを、HP1でたえる（1しあいに1かい）' },
+    manpuku: { name: 'まんぷくパワー', text: 'HPがまんたんのあいだ、こうげきが1.3ばい' },
+    ketsueki: { name: 'けつえき', text: 'ターンのおわりに、HPが5%かいふくする' },
+    nerai: { name: 'ねらいうち', text: 'あいてのHPがはんぶんいかだと、ダメージが1.5ばい' },
+    yousumi: { name: 'ようすみ', text: 'あいてがじょうたいいじょうだと、ダメージが1.5ばい' },
+    seal: { name: 'こうげきふうじ', text: 'あいてのゆうせんどを0にする（ガードもさきにうてる）' },
+    hunter: { name: 'すばやさハンター', text: '👟があいてよりたかいと、ダメージが1.3ばい' },
+    okuri: { name: 'ぞくせいおくり', text: 'ゆうりなあいしょうのとき、ダメージが1.2ばい' },
+    taisaku: { name: 'にがてたいさく', text: 'ふりなあいしょうのとき、うけるダメージが0.7ばい' },
+    furyo: { name: 'ふりょのふう', text: 'おなじぞくせいのあいてから、うけるダメージが0.7ばい' },
+    zen: { name: 'ぜんぞくせい', text: 'どのあいてにも、ダメージが1.1ばい' },
+    saisho: { name: 'さいしょのいちげき', text: 'でてさいしょのこうげきが2ばい（こうたいででたときも）' },
+    gardret: { name: 'ガードリターン', text: 'こうげきをふせいだつぎのこうげきが1.5ばい' },
+    renzoku: { name: 'れんぞくこうげき', text: 'おなじわざをつづけるたび、ダメージ+10%（さいだい+30%）' },
+    charge: { name: 'とくしゅチャージ', text: 'とくしゅのまちじかんが2ターンになる' },
+    honor: { name: 'こうたいのほまれ', text: 'こうたいででたターン、うけるダメージが0.77ばい' },
+    thorn: { name: 'どくのとげ', text: 'こうげきしてきたあいてを、どくにする（30%）' },
+    mahi: { name: 'まひのかたき', text: 'まひさせられたあと、つぎのこうげきが2ばい' },
+    stunproof: { name: 'ふみんのこころ', text: 'まひは1かいめだけ。2かいめからむこう' },
+    shobu: { name: 'しょうぶどころ', text: '3ぼんしょうぶの2ほんめから、ダメージ1.1ばい・うけるダメージ0.9ばい' },
+    chase: { name: 'おいうち', text: 'あいてをたおすと、つぎのこうげきが1.5ばい' },
+    brave: { name: 'ゆうきのくすり', text: 'やくそうのかいふくりょうが1.5ばい' },
+  };
+  const traitNames = (ids) => ids.map((i) => TRAITS[i].name).join('・');
+  // 最終ダメージにかかる倍率と、はたらいた特性（a=こうげき側 d=うける側 kind='dmg'|'sp' mult=属性の相性倍率 tr=こうげき前の状態 game=何試合目か）
+  function traitMult(a, d, kind, mult, tr, game) {
+    tr = tr || a.tr;
+    let k = 1; const atk = [], def = [];
+    const on = (arr, id, m) => { k *= m; arr.push(id); };
+    const A = a.trait, D = d.trait;
+    if (A === 'zekkyo' && kind === 'dmg' && a.hp * 5 <= a.maxHp) on(atk, A, 3);
+    if (A === 'manpuku' && kind === 'dmg' && a.hp >= a.maxHp) on(atk, A, 1.3);
+    if (A === 'nigate_kaeshi' && kind === 'sp' && affinity(d.attr, a.bodyAttr) > 1) on(atk, A, 3);
+    if (A === 'nerai' && d.hp * 2 <= d.maxHp) on(atk, A, 1.5);
+    if (A === 'yousumi' && (d.status.poison > 0 || d.status.stun > 0)) on(atk, A, 1.5);
+    if (A === 'hunter' && a.dx > d.dx) on(atk, A, 1.3);
+    if (A === 'okuri' && mult > 1) on(atk, A, 1.2);
+    if (A === 'zen') on(atk, A, 1.1);
+    if (A === 'saisho' && tr.fresh) on(atk, A, 2);
+    if (A === 'gardret' && tr.gr) on(atk, A, 1.5);
+    if (A === 'renzoku' && tr.combo > 0) on(atk, A, 1 + 0.1 * tr.combo);
+    if (A === 'mahi' && tr.revenge) on(atk, A, 2);
+    if (A === 'chase' && tr.chase) on(atk, A, 1.5);
+    if (A === 'shobu' && game >= 2) on(atk, A, 1.1);
+    if (D === 'girigiri' && d.hp * 5 <= d.maxHp) on(def, D, 0.5);
+    if (D === 'taisaku' && mult > 1) on(def, D, 0.7);
+    if (D === 'furyo' && a.attr === d.attr) on(def, D, 0.7);
+    if (D === 'honor' && d.tr.hon > 0) on(def, D, 1 / 1.3);
+    if (D === 'shobu' && game >= 2) on(def, D, 0.9);
+    return { k, atk, def };
+  }
+  // こうげきを始めるとき：連続回数を数え、「次の1回だけ」の効果を使いきる。こうげき前の状態を返す
+  function beginAttack(u, skillId) {
+    const t = u.tr;
+    t.combo = t.last === skillId ? Math.min(3, t.combo + 1) : 0; t.last = skillId;
+    const snap = { ...t };
+    t.fresh = false; t.gr = false; t.revenge = false; t.chase = false;
+    return snap;
+  }
+  // ふくつ：倒される一撃を HP1 でたえる
+  function guts(d, dmg) {
+    if (d.trait === 'fukutsu' && !d.tr.used && dmg >= d.hp && d.hp > 1) { d.tr.used = true; return { dmg: d.hp - 1, saved: true }; }
+    return { dmg, saved: false };
+  }
+  // ダメージを与えたあと：どくのとげ（こうげきした側が毒になる）／おいうち（倒したら次の1回が強くなる）
+  function afterHit(u, d, rng) {
+    let thorn = false;
+    if (d.trait === 'thorn' && d.hp > 0 && u.hp > 0 && !u.immune.includes('poison') && u.status.poison === 0 && rng() < 0.3) { u.status.poison = 3; thorn = true; }
+    if (u.trait === 'chase' && d.hp <= 0) u.tr.chase = true;
+    return { thorn };
+  }
+  const onBlock = (d) => { if (d.trait === 'gardret') d.tr.gr = true; };
+  const onSwitchIn = (f) => { f.tr.fresh = true; f.tr.hon = 1; };
+  // ターンの終わり：こうたいのほまれを終え、けつえきで回復（回復した量を返す）
+  function endTurnTraits(f) {
+    if (f.tr.hon > 0) f.tr.hon--;
+    if (f.trait === 'ketsueki' && f.hp > 0 && f.hp < f.maxHp) {
+      const n = Math.min(f.maxHp - f.hp, Math.max(1, Math.round(f.maxHp * 0.05)));
+      f.hp += n; return n;
+    }
+    return 0;
+  }
+  const spCooldown = (f) => (f.trait === 'charge' ? 2 : SP_COOLDOWN);
+  // バーコードの番号(000〜999)→アイテム番号。もとの68種は「% 68」のまま、あとから足した新アイテムは末尾のコードを使う
+  const BASE_ITEMS = 68;
+  function itemIndexOf(n) {
+    const extra = DATA.items.length - BASE_ITEMS;
+    return n >= 1000 - extra ? BASE_ITEMS + (n - (1000 - extra)) : n % BASE_ITEMS;
   }
 
   // ---- 対戦の報酬 ----
@@ -289,6 +391,7 @@
     let p = PRICE_TIER[e.tier] || 150;
     if (e.slot === 'accessory') p *= 1.15;
     if (e.element || e.inflict || e.resist || e.immune) p *= 1.2;
+    if (e.trait) p *= 1.3;
     return Math.round(p / 10) * 10;
   }
   const sellPrice = (id) => Math.floor(itemPrice(id) / 20) * 10; // 買値の半分
@@ -317,6 +420,7 @@
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, kkRank, KK, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
+    TRAITS, traitMult, traitNames, beginAttack, guts, afterHit, onBlock, onSwitchIn, endTurnTraits, spCooldown, itemIndexOf,
     healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA, COLLAB, setCollab, setCollabCodes, addCollabCode,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

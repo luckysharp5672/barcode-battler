@@ -20,7 +20,9 @@
   function createSide(name, fighters, herbs = 3) {
     return { name, party: fighters, field: [0, 1], herbs, usedItems: [] };
   }
-  function createBattle(a, b) { return { sides: [a, b], round: 0, over: false, winner: null }; }
+  function createBattle(a, b, game) { return { sides: [a, b], round: 0, over: false, winner: null, game: game || 1 }; }
+  // こうげきふうじ：場のあいてがもっていると、こちらの技の優先度は0として扱われる
+  const effPri = (st, s, sk) => (SLOTS.some((k) => alive(fighterAt(st, 1 - s, k)) && fighterAt(st, 1 - s, k).trait === 'seal') ? 0 : sk.pri);
   // 行動できる（場にいて、たおれていない）スロット
   const liveSlots = (st, s) => SLOTS.filter((k) => alive(fighterAt(st, s, k)));
 
@@ -54,7 +56,7 @@
       const side = st.sides[s];
       if (!alive(fighterAt(st, s, k)) || !benchAlive(side).includes(a.to)) continue;
       const from = fighterAt(st, s, k);
-      side.field[k] = a.to; fighterAt(st, s, k).lastGuard = false;
+      side.field[k] = a.to; fighterAt(st, s, k).lastGuard = false; BB.onSwitchIn(fighterAt(st, s, k));
       switched.push({ s, k });
       ev.push({ t: 'switch', s, slot: k, from: from.name, to: fighterAt(st, s, k).name, idx: a.to });
     }
@@ -65,7 +67,7 @@
       const a = actions[s][k];
       if (!a || a.type !== 'skill' || switched.some((x) => x.s === s && x.k === k)) continue;
       const u = fighterAt(st, s, k); if (!alive(u)) continue;
-      order.push({ s, k, a, pri: SKILLS[a.skill].pri, dx: u.dx, r: rng() });
+      order.push({ s, k, a, pri: effPri(st, s, SKILLS[a.skill]), dx: u.dx, r: rng() });
     }
     order.sort((x, y) => y.pri - x.pri || y.dx - x.dx || x.r - y.r);
     ev.unshift({
@@ -82,6 +84,7 @@
       if (!avail || avail.off) { ev.push({ t: 'msg', text: `${u.name} の ${sk.name}… しかしうまくいかなかった！` }); u.lastGuard = false; continue; }
       ev.push({ t: 'use', s, slot: k, who: u.name, skill: sk.name });
       if (sk.kind !== 'guard') u.lastGuard = false;
+      if (sk.kind !== 'dmg' && sk.kind !== 'sp') u.tr.last = '';
 
       if (sk.kind === 'guard') {
         u.protect = true; u.lastGuard = true;
@@ -92,18 +95,25 @@
         if (!alive(fighterAt(st, 1 - s, ts))) ts = 1 - ts;
         const d = fighterAt(st, 1 - s, ts);
         if (!alive(d)) continue;
-        if (d.protect) { ev.push({ t: 'block', s: 1 - s, slot: ts, name: d.name }); continue; }
+        const tr0 = BB.beginAttack(u, sk.id);
+        if (d.protect) { BB.onBlock(d); ev.push({ t: 'block', s: 1 - s, slot: ts, name: d.name }); continue; }
         if (sk.kind === 'dmg' && !BB.rollHit(u, d, rng)) { ev.push({ t: 'miss', s, slot: k, ds: 1 - s, dslot: ts }); continue; }
         let dmg, mult, crit = false;
         if (sk.kind === 'sp') {
-          ({ dmg, mult } = BB.specialDamage(u, d, ATTACK_TIMING)); u.spCd = BB.SP_COOLDOWN;
+          ({ dmg, mult } = BB.specialDamage(u, d, ATTACK_TIMING)); u.spCd = BB.spCooldown(u);
         } else {
           ({ dmg, mult } = BB.calcDamage(u, d, ATTACK_TIMING * sk.power, rng));
           if (rng() < CRIT_RATE) { crit = true; dmg = Math.round(dmg * 1.5); }
         }
-        dmg = Math.max(1, Math.round(dmg * fat));
+        const tm = BB.traitMult(u, d, sk.kind, mult, tr0, st.game);
+        dmg = Math.max(1, Math.round(dmg * fat * tm.k));
+        if (u.trait === 'tome') dmg = Math.max(dmg, Math.round(d.hp / 3));
+        const gt = BB.guts(d, dmg); dmg = gt.dmg;
+        if (tm.atk.length) ev.push({ t: 'trait', s, slot: k, text: BB.traitNames(tm.atk) });
+        if (tm.def.length || gt.saved) ev.push({ t: 'trait', s: 1 - s, slot: ts, text: BB.traitNames(gt.saved ? tm.def.concat('fukutsu') : tm.def) });
         d.hp = Math.max(0, d.hp - dmg);
         ev.push({ t: 'dmg', s: 1 - s, slot: ts, idx: idxAt(st, 1 - s, ts), dmg, hp: d.hp, mult, crit, name: d.name });
+        if (BB.afterHit(u, d, rng).thorn) { ev.push({ t: 'trait', s: 1 - s, slot: ts, text: BB.TRAITS.thorn.name }); ev.push({ t: 'status', s, slot: k, name: u.name, status: 'poison' }); }
         if (sk.kind === 'dmg') for (const key of BB.tryInflict(u, d, rng)) ev.push({ t: 'status', s: 1 - s, slot: ts, name: d.name, status: key });
         if (!alive(d)) ev.push({ t: 'faint', s: 1 - s, slot: ts, idx: idxAt(st, 1 - s, ts), name: d.name });
       } else if (sk.kind === 'herb' || sk.kind === 'power') {
@@ -130,6 +140,10 @@
         if (!alive(f)) ev.push({ t: 'faint', s, slot: k, idx: idxAt(st, s, k), name: f.name });
       }
     }
+    for (const s of [0, 1]) for (const k of SLOTS) {
+      const f = fighterAt(st, s, k), n = BB.endTurnTraits(f);
+      if (n) { ev.push({ t: 'trait', s, slot: k, text: BB.TRAITS.ketsueki.name }); ev.push({ t: 'heal', s, slot: k, idx: idxAt(st, s, k), amount: n, hp: f.hp }); }
+    }
     for (const side of st.sides) for (const f of side.party) if (f.spCd > 0) f.spCd--;
 
     // 4. 勝敗：どちらかの全員がたおれたら終わり
@@ -152,7 +166,7 @@
   function replaceSlot(st, s, slot, to) {
     const side = st.sides[s];
     if (!benchAlive(side).includes(to)) return null;
-    side.field[slot] = to; side.party[to].lastGuard = false;
+    side.field[slot] = to; side.party[to].lastGuard = false; BB.onSwitchIn(side.party[to]);
     return { t: 'switch', s, slot, from: '', to: side.party[to].name, idx: to };
   }
 
