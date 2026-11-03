@@ -30,10 +30,12 @@
       if (im) ctx.drawImage(im, 0, 0, size, size);
       const rk = BB.rarityOf(dec.effect), R = BB.RARITY[rk];
       if (R.color) {   // レア度の色の縁（ベーシックはなし。レジェンドはにじ色）
-        const w = Math.max(3, size * 0.045);
+        const w = Math.max(6, size * 0.1);
         let st = R.color;
         if (rk === 'legend') { const g = ctx.createLinearGradient(0, 0, size, size); [['#ff5c5c', 0], ['#ffd34d', 0.25], ['#5cff8a', 0.5], ['#5cc8ff', 0.75], ['#c45cff', 1]].forEach(([col, p]) => g.addColorStop(p, col)); st = g; }
-        ctx.lineWidth = w; ctx.strokeStyle = st; ctx.strokeRect(w / 2, w / 2, size - w, size - w);
+        ctx.strokeStyle = st;
+        ctx.globalAlpha = 0.3; ctx.lineWidth = w * 2; ctx.strokeRect(w, w, size - w * 2, size - w * 2);   // 内がわへにじむ光
+        ctx.globalAlpha = 1; ctx.lineWidth = w; ctx.strokeRect(w / 2, w / 2, size - w, size - w);
       }
       return c;
     }
