@@ -16,6 +16,11 @@
   const loadImg = (src) => imgCache[src] || (imgCache[src] = new Promise((res) => {
     const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src;
   }));
+  // アイテムのレア度のラベル（名前の横に出す）
+  function rarTag(d) {
+    const k = BB.rarityOf(d && d.effect);
+    return `<span class="tag rar-${k}">${BB.RARITY[k].name}</span>`;
+  }
   async function makeSticker(dec, size = 384) {
     const c = document.createElement('canvas');
     c.width = c.height = size; c.className = 'sticker';
@@ -23,6 +28,13 @@
     if (dec.kind === 'item') {
       const im = await loadImg(`assets/items/${dec.itemId}.webp`);
       if (im) ctx.drawImage(im, 0, 0, size, size);
+      const rk = BB.rarityOf(dec.effect), R = BB.RARITY[rk];
+      if (R.color) {   // レア度の色の縁（ベーシックはなし。レジェンドはにじ色）
+        const w = Math.max(3, size * 0.045);
+        let st = R.color;
+        if (rk === 'legend') { const g = ctx.createLinearGradient(0, 0, size, size); [['#ff5c5c', 0], ['#ffd34d', 0.25], ['#5cff8a', 0.5], ['#5cc8ff', 0.75], ['#c45cff', 1]].forEach(([col, p]) => g.addColorStop(p, col)); st = g; }
+        ctx.lineWidth = w; ctx.strokeStyle = st; ctx.strokeRect(w / 2, w / 2, size - w, size - w);
+      }
       return c;
     }
     const [bg, fx, ch] = await Promise.all([
@@ -206,7 +218,7 @@
         ${statGrid(BB.statsAt(d, lv))}${barSvg(d.code)}`;
     }
     return `<div class="stkwrap" id="stk${cap}"></div>
-      <div class="nm">🎁 ${kanaItem(d.name)}</div><div class="small">${d.text}</div>${d.code ? barSvg(d.code) : '<div class="small">🎒 もちものから（つかうと1こへります）</div>'}`;
+      <div class="nm">🎁 ${kanaItem(d.name)} ${rarTag(d)}</div><div class="small">${d.text}</div>${d.code ? barSvg(d.code) : '<div class="small">🎒 もちものから（つかうと1こへります）</div>'}`;
   }
 
   // ---------- ホーム ----------
@@ -302,7 +314,7 @@
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
     const opts = ids.length
-      ? ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ×${player.bag[id]}<div class="small">${d.text}</div>${heldBy(id) ? '<div><span class="tag">持たせ中</span></div>' : ''}`, value: 0, disabled: true }; })
+      ? ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ${rarTag(d)} ×${player.bag[id]}<div class="small">${d.text}</div>${heldBy(id) ? '<div><span class="tag">持たせ中</span></div>' : ''}`, value: 0, disabled: true }; })
       : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
     opts.push({ label: '← もどる', value: 0 });
     await choose('持ち物（パーティ編成で持たせられます）', opts, { home: true });
@@ -623,7 +635,7 @@
   }
   async function pickPartyItem(code) {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0 && (!heldBy(id) || heldBy(id) === code));
-    const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b>${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<div class="small">${d.text}</div>`, value: id }; }));
+    const opts = [{ label: 'なし（外す）', value: '-' }].concat(ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ${rarTag(d)}${player.bag[id] > 1 ? ' ×' + player.bag[id] : ''}<div class="small">${d.text}</div>`, value: id }; }));
     opts.push({ label: '← もどる', value: 0 });
     const id = await choose(`${dex[code].name} に持たせるアイテム`, opts);
     if (!id) return;
@@ -682,7 +694,7 @@
       const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（同じキャラ・属性のバーコードで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
       xpRow = `<div class="dbar"><span class="dn t">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
     }
-    const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b>：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
+    const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b> ${rarTag(f.item)}：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
     const atk = f.atkAttr !== f.attr ? `／攻撃の属性は${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? `／体の属性は${BB.ATTRS[f.bodyAttr].name}` : '';
     let aff = '';
     if (hintOn && foeAttrs) {
@@ -1708,7 +1720,7 @@
     BB.shopStock(`${today()}-${cur}`, 3).forEach((id) => {
       const d = BB.itemById(id), price = BB.itemPrice(id), got = player.shop.bought.includes(id);
       srow(box, {
-        thumb: itemThumb(id), html: `<b>${d.name}</b><div class="small">${d.text}</div><div>${yen(price)}${got ? '　<span class="tag">売り切れ</span>' : ''}</div>`,
+        thumb: itemThumb(id), html: `<b>${d.name}</b> ${rarTag(d)}<div class="small">${d.text}</div><div>${yen(price)}${got ? '　<span class="tag">売り切れ</span>' : ''}</div>`,
         buttons: [[got ? '買った' : '買う', async () => {
           if (player.money < price) return;
           player.bag[id] = (player.bag[id] || 0) + 1; player.shop.bought.push(id); await pay(price);
@@ -1725,7 +1737,7 @@
     ids.forEach((id) => {
       const d = BB.itemById(id), price = BB.sellPrice(id), sellable = player.bag[id] - (heldBy(id) ? 1 : 0);
       srow(box, {
-        thumb: itemThumb(id), html: `<b>${d.name}</b> ×${player.bag[id]}<div class="small">${d.text}</div><div>売値 ${yen(price)}${heldBy(id) ? '　<span class="tag">持たせ中</span>' : ''}</div>`,
+        thumb: itemThumb(id), html: `<b>${d.name}</b> ${rarTag(d)} ×${player.bag[id]}<div class="small">${d.text}</div><div>売値 ${yen(price)}${heldBy(id) ? '　<span class="tag">持たせ中</span>' : ''}</div>`,
         buttons: [['1個売る', async () => {
           player.bag[id]--; if (player.bag[id] <= 0) delete player.bag[id];
           player.money += price; await savePlayer(); shopMsg(`💱 ${d.name} を売りました（+${price}）`); renderShop();

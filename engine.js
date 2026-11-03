@@ -353,15 +353,23 @@
     return n >= 1000 - extra ? BASE_ITEMS + (n - (1000 - extra)) : n % BASE_ITEMS;
   }
 
+  // ---- アイテムのレア度（アイテムごとに固有。ドロップのおもさと値段の倍率・画面の色） ----
+  const RARITY = {
+    basic: { name: 'ベーシック', color: '', w: 12, price: 1 },
+    ex: { name: 'EX', color: '#58a6ff', w: 8, price: 1.15 },
+    rare: { name: 'レア', color: '#a371f7', w: 4, price: 1.4 },
+    superrare: { name: 'スーパーレア', color: '#f0b429', w: 2, price: 1.8 },
+    legend: { name: 'レジェンド', color: '#ff7b72', w: 1, price: 3 },
+  };
+  const rarityOf = (e) => ((e && e.rarity) in RARITY ? e.rarity : 'basic');
+
   // ---- 対戦の報酬 ----
   // お金: 勝つと 50+10×敵Lv（±20%）、負けると10（±20%）
   const rewardMoney = (win, foeLv, rng) => Math.round((win ? 50 + 10 * foeLv : 10) * (0.8 + rng() * 0.4));
-  // アイテムのドロップ: 勝つと12%、負けると3%。格が低いもの・回復薬ほど出やすい
+  // アイテムのドロップ: 勝つと12%、負けると3%。レア度が低いものほど出やすい（おもさは RARITY の w）
   const dropWeight = (it) => {
     const e = it.effect;
-    if (e.unique) return 1;
-    if (e.kind === 'consumable') return e.heal_hp_pct === 100 ? 1 : 3;
-    return { 1: 4, 2: 3, 3: 2, 4: 1 }[e.tier] || 1;
+    return RARITY[rarityOf(e)].w;
   };
   function rollDrop(win, rng) {
     if (rng() >= (win ? 0.12 : 0.03)) return null;
@@ -379,7 +387,7 @@
   // ---- お店 ----
   const PRICE_TIER = { 1: 150, 2: 400, 3: 900, 4: 2000 };
   // 買値。装備は格で決まり、アクセサリーは×1.15、特殊効果つきは×1.2。回復薬は効果で決まる
-  function itemPrice(id) {
+  function basePrice(id) {
     const it = DATA.items.find((x) => x.id === id), e = it.effect;
     if (e.kind === 'consumable') {
       if (e.heal_hp_pct === 100) return 1500;
@@ -391,8 +399,12 @@
     let p = PRICE_TIER[e.tier] || 150;
     if (e.slot === 'accessory') p *= 1.15;
     if (e.element || e.inflict || e.resist || e.immune) p *= 1.2;
-    if (e.trait) p *= 1.3;
     return Math.round(p / 10) * 10;
+  }
+  // 買値：ランク・種類で決まる値段 × レア度の倍率
+  function itemPrice(id) {
+    const it = DATA.items.find((x) => x.id === id);
+    return Math.round((basePrice(id) * RARITY[rarityOf(it.effect)].price) / 10) * 10;
   }
   const sellPrice = (id) => Math.floor(itemPrice(id) / 20) * 10; // 買値の半分
   // 日替わりの品ぞろえ。同じ文字列（日付＋家族）なら、いつ開いても同じ3つ。固有の強い装備は並ばない
@@ -420,7 +432,7 @@
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, kkRank, KK, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    TRAITS, traitMult, traitNames, beginAttack, guts, afterHit, onBlock, onSwitchIn, endTurnTraits, spCooldown, itemIndexOf,
+    RARITY, rarityOf, TRAITS, traitMult, traitNames, beginAttack, guts, afterHit, onBlock, onSwitchIn, endTurnTraits, spCooldown, itemIndexOf,
     healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA, COLLAB, setCollab, setCollabCodes, addCollabCode,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
