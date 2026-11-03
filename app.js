@@ -26,7 +26,7 @@
     c.width = c.height = size; c.className = 'sticker';
     const ctx = c.getContext('2d');
     if (dec.kind === 'item') {
-      const im = await loadImg(`assets/items/${dec.itemId}.webp`);
+      const im = await loadImg(`assets/items/${String(dec.itemId).split('@')[0]}.webp`);
       if (im) ctx.drawImage(im, 0, 0, size, size);
       const rk = BB.rarityOf(dec.effect), R = BB.RARITY[rk];
       if (R.color) {   // レア度の色の縁（ベーシックはなし。レジェンドはにじ色）
@@ -187,7 +187,7 @@
   }
   // 表示用：漢字のアイテム名をひらがなに（子ども向け）
   const ITEM_KANA = {"木の剣": "きのつるぎ", "鉄の剣": "てつのつるぎ", "鋼の剣": "はがねのつるぎ", "ミスリルの剣": "ミスリルのつるぎ", "炎の剣": "ほのおのつるぎ", "紅蓮の大剣": "ぐれんのたいけん", "水の刃": "みずのやいば", "聖剣": "せいけん", "影の刃": "かげのやいば", "樫の杖": "かしのつえ", "魔術師の杖": "まじゅつしのつえ", "賢者の杖": "けんじゃのつえ", "短弓": "たんきゅう", "長弓": "ちょうきゅう", "疾風の弓": "はやてのゆみ", "暴風の長弓": "ぼうふうのちょうきゅう", "潮騒の槍": "しおさいのやり", "雷の槍": "かみなりのやり", "大地のハンマー": "だいちのハンマー", "巨岩の大槌": "きょがんのおおづち", "麻痺のハンマー": "まひのハンマー", "紫電のダガー": "しでんのダガー", "毒のダガー": "どくのダガー", "鬼神の戦斧": "きしんのいくさおの", "革の鎧": "かわのよろい", "鎖かたびら": "くさりかたびら", "板金の鎧": "ばんきんのよろい", "竜鱗の鎧": "りゅうりんのよろい", "魔道士のローブ": "まどうしのローブ", "聖なるローブ": "せいなるローブ", "聖なるマント": "せいなるマント", "清めの鎖鎧": "きよめのくさりよろい", "炎の鎧": "ほのおのよろい", "灼熱の鎧": "しゃくねつのよろい", "水の鎧": "みずのよろい", "潮の鎧": "しおのよろい", "岩の鎧": "いわのよろい", "巨岩の鎧": "きょがんのよろい", "雷の鎧": "かみなりのよろい", "紫電の鎧": "しでんのよろい", "風の鎧": "かぜのよろい", "嵐の鎧": "あらしのよろい", "疾風の指輪": "はやてのゆびわ", "力の腕輪": "ちからのうでわ", "鍛錬の腕輪": "たんれんのうでわ", "守りの護符": "まもりのごふ", "賢者の耳飾り": "けんじゃのみみかざり", "跳躍のブーツ": "ちょうやくのブーツ", "生命のお守り": "せいめいのおまもり", "勇者の紋章": "ゆうしゃのもんしょう", "毒消しの護符": "どくけしのごふ", "目覚ましの護符": "めざましのごふ", "鉄の意志": "てつのいし", "五属性の指輪": "ごぞくせいのゆびわ", "炎の指輪": "ほのおのゆびわ", "水の指輪": "みずのゆびわ", "岩の指輪": "いわのゆびわ", "雷の指輪": "かみなりのゆびわ", "風の指輪": "かぜのゆびわ", "完全なる護り": "かんぜんなるまもり", "守護核": "しゅごかく", "万能薬": "ばんのうやく"};
-  const kanaItem = (n) => ITEM_KANA[n] || n;
+  const kanaItem = (n) => { const i = n.indexOf('【'); return i < 0 ? ITEM_KANA[n] || n : (ITEM_KANA[n.slice(0, i)] || n.slice(0, i)) + n.slice(i); };
   const ATTR_JA = ['かぜ', 'つち', 'みず', 'ほのお', 'かみなり'];
   const TYPE_JA = (t) => String(t).replace(/特殊能力/g, 'とくしゅ').replace(/攻撃/g, 'こうげき').replace(/防御/g, 'ぼうぎょ').replace(/速度/g, 'すばやさ').replace(/体力/g, 'たいりょく').replace(/特化型/g, 'とっか').replace(/型/g, 'タイプ');
   function statusText(st) {
@@ -313,13 +313,56 @@
   const bagCount = () => Object.values(player.bag).reduce((a, b) => a + b, 0);
   function renderWallet() { $('wallet').textContent = `${titleText() ? '【' + titleText() + '】　' : ''}💰 ${player.money.toLocaleString()}　🎒 もちもの ${bagCount()}こ`; }
   async function savePlayer() { await Store.setPlayer(cur, player); renderWallet(); }
+  // ---- アイテムのごうせい ----
+  // 2つえらんで、1つに合わせる。ちがうレア度なら高いほう、同じレア度なら同じか、ひとつ上のレア度の、べつのアイテム。
+  // 素材のどちらかが属性（武器なら攻撃・防具なら体）をもっていれば、その属性を引き継げる
+  const elemOf = (id) => { const e = BB.itemById(id).effect; return e.element || ''; };
+  const elemLabel = (k) => { const A = BB.ATTRS[BB.ATTR_OF_KEY[k]]; return `${A.emoji}${A.name}`; };
+  async function synthItems() {
+    const held = (id) => (heldBy(id) ? 1 : 0);
+    const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0 && BB.itemById(id))
+      .sort((a, b) => BB.RARITY_ORDER.indexOf(BB.rarityOf(BB.itemById(b).effect)) - BB.RARITY_ORDER.indexOf(BB.rarityOf(BB.itemById(a).effect)));
+    const pickOne = async (title, first) => {
+      const opts = ids.map((id) => {
+        const d = BB.itemById(id), left = player.bag[id] - held(id) - (first === id ? 1 : 0);
+        return { thumb: itemThumb(id), label: `<b>${d.name}</b> ${rarTag(d)} ×${player.bag[id]}<div class="small">${d.text}</div>${first === id ? '<div><span class="tag">1つめにえらんだ</span></div>' : ''}${held(id) && left < 1 ? '<div><span class="tag">持たせ中（はずすと つかえます）</span></div>' : ''}`, value: id, disabled: left < 1 };
+      });
+      return choose(title, opts, { back: { value: 0 } });
+    };
+    if (ids.length < 1) { await choose('アイテムごうせい', [{ label: 'もちものが ありません', value: 0, disabled: true }], { back: { value: 0 } }); return; }
+    const a = await pickOne('ごうせい：1つめをえらぶ', null);
+    if (!a) return;
+    const b = await pickOne('ごうせい：2つめをえらぶ', a);
+    if (!b) return;
+    const da = BB.itemById(a), db = BB.itemById(b);
+    // 引き継ぐ属性：素材がもっている属性から1つ
+    const elems = [...new Set([elemOf(a), elemOf(b)].filter(Boolean))];
+    const rule = 'ちがうレア度：高いほうの、べつのアイテム<br>同じレア度：同じレア度の べつのアイテム（70%）か、ひとつ上のレア度（30%）<br>※ 武器・防具のときだけ、ぞくせいが つきます。えらんだ2つは なくなります';
+    const opts = [{ label: `<b>${da.name}</b> ${rarTag(da)} ＋ <b>${db.name}</b> ${rarTag(db)}<div class="small">${rule}</div>`, value: 0, disabled: true }]
+      .concat(elems.map((k) => ({ label: `${elemLabel(k)} を うけついで ごうせい`, value: 'e:' + k })))
+      .concat([{ label: elems.length ? 'ぞくせいを うけつがずに ごうせい' : 'ごうせいする', value: 'go' }]);
+    const r = await choose('ごうせい しますか？', opts, { back: { value: 0 } });
+    if (!r) return;
+    const elem = r.startsWith('e:') ? r.slice(2) : '';
+    const pick = BB.synthPick(a, b);
+    const newId = BB.withElement(pick.item.id, elem);
+    player.bag[a]--; if (player.bag[a] <= 0) delete player.bag[a];
+    player.bag[b]--; if (player.bag[b] <= 0) delete player.bag[b];
+    player.bag[newId] = (player.bag[newId] || 0) + 1;
+    cleanParty(); await savePlayer();
+    const nd = BB.itemById(newId);
+    const note = [pick.up ? '✨ レア度が ひとつ上がった！' : '', elem && newId.includes('@') ? `${elemLabel(elem)} の ぞくせいを うけついだ！` : elem ? 'このアイテムには、ぞくせいが つかなかった…' : ''].filter(Boolean).join('<br>');
+    await choose('ごうせい せいこう！', [{ thumb: itemThumb(newId), label: `<b>${nd.name}</b> ${rarTag(nd)}<div class="small">${nd.text}</div>${note ? '<div>' + note + '</div>' : ''}`, value: 0, disabled: true }], { back: { value: 0 } });
+  }
   async function openBag() {
     const ids = Object.keys(player.bag).filter((id) => player.bag[id] > 0);
     const opts = ids.length
       ? ids.map((id) => { const d = BB.itemById(id); return { thumb: itemThumb(id), label: `<b>${d.name}</b> ${rarTag(d)} ×${player.bag[id]}<div class="small">${d.text}</div>${heldBy(id) ? '<div><span class="tag">持たせ中</span></div>' : ''}`, value: 0, disabled: true }; })
       : [{ label: 'まだありません。書籍のバーコードを読み取るか、対戦に勝つと手に入ります', value: 0, disabled: true }];
+    opts.unshift({ label: '🔨 アイテムごうせい（2つを1つに）', value: 'synth' });
     opts.push({ label: '← もどる', value: 0 });
-    await choose('持ち物（パーティ編成で持たせられます）', opts, { home: true });
+    const act = await choose('持ち物（パーティ編成で持たせられます）', opts, { home: true });
+    if (act === 'synth') { await synthItems(); await openBag(); }
   }
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);

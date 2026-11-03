@@ -379,9 +379,49 @@
     return DATA.items[0].id;
   }
   // アイテムID → アイテム（バーコードなしで持ち物から使うとき）
+  // ごうせいで属性を引き継いだアイテムのIDは「もとのID@属性」（例：iron_sword@fire）。武器なら攻撃の属性、防具なら体の属性が、その属性になる
+  function parseItemId(id) {
+    const [base, elem] = String(id).split('@');
+    return { base, elem: elem || '' };
+  }
   function itemById(id) {
-    const it = DATA.items.find((x) => x.id === id);
-    return it ? { kind: 'item', code: '', prefix: '', itemId: it.id, name: it.name, effect: it.effect, text: describeItem(it.effect) } : null;
+    const { base, elem } = parseItemId(id);
+    const it = DATA.items.find((x) => x.id === base);
+    if (!it) return null;
+    let effect = it.effect, name = it.name;
+    if (elem && ATTR_OF_KEY[elem] !== undefined && (effect.slot === 'weapon' || effect.slot === 'armor')) {
+      effect = { ...effect, element: elem };
+      const A = ATTRS[ATTR_OF_KEY[elem]];
+      name += `【${A.emoji}${A.name}】`;
+    } else id = base;
+    return { kind: 'item', code: '', prefix: '', itemId: id, name, effect, text: describeItem(effect) };
+  }
+  // ---- アイテムのごうせい ----
+  const RARITY_ORDER = ['basic', 'ex', 'rare', 'superrare', 'legend'];
+  const SYNTH_UP = 0.3;   // 同じレア度どうしのとき、ひとつ上のレア度になる確率
+  const itemKind = (e) => (e.kind === 'consumable' ? 'consumable' : e.slot);
+  const rankOf = (it) => RARITY_ORDER.indexOf(rarityOf(it.effect));
+  // 2つのアイテムをごうせいしたときに出る、もとのアイテム。{ item, up（レア度が上がったか）, rank }
+  // ・ちがうレア度：高いほうのレア度（種類も高いほうと同じ）／同じレア度：同じレア度か、ひとつ上（確率 SYNTH_UP）。種類は素材のどちらか
+  // ・素材と同じアイテムは出ない（出せる候補がなければ、同じものも出る）
+  function synthPick(aId, bId, rng) {
+    rng = rng || Math.random;
+    const A = DATA.items.find((x) => x.id === parseItemId(aId).base), B = DATA.items.find((x) => x.id === parseItemId(bId).base);
+    const ra = rankOf(A), rb = rankOf(B);
+    let rank, src, up = false;
+    if (ra !== rb) { rank = Math.max(ra, rb); src = ra > rb ? A : B; }
+    else { rank = ra; src = rng() < 0.5 ? A : B; if (rank < RARITY_ORDER.length - 1 && rng() < SYNTH_UP) { rank++; up = true; } }
+    const kind = itemKind(src.effect);
+    const pool = (rk, excl) => DATA.items.filter((x) => rankOf(x) === rk && itemKind(x.effect) === kind && (!excl || (x.id !== A.id && x.id !== B.id)));
+    let cand = pool(rank, true);
+    if (!cand.length && up) { rank--; up = false; cand = pool(rank, true); }   // ひとつ上に、その種類がない
+    if (!cand.length) cand = pool(rank, false);
+    return { item: cand[Math.floor(rng() * cand.length)], up, rank };
+  }
+  // 属性を引き継いだID（武器・防具だけ。それ以外は、もとのID）
+  function withElement(baseId, elem) {
+    const it = DATA.items.find((x) => x.id === baseId);
+    return elem && it && (it.effect.slot === 'weapon' || it.effect.slot === 'armor') ? baseId + '@' + elem : baseId;
   }
 
   // ---- お店 ----
@@ -403,8 +443,10 @@
   }
   // 買値：ランク・種類で決まる値段 × レア度の倍率
   function itemPrice(id) {
-    const it = DATA.items.find((x) => x.id === id);
-    return Math.round((basePrice(id) * RARITY[rarityOf(it.effect)].price) / 10) * 10;
+    const { base, elem } = parseItemId(id);
+    const it = DATA.items.find((x) => x.id === base);
+    const eleBonus = elem && !it.effect.element && (it.effect.slot === 'weapon' || it.effect.slot === 'armor') ? 1.2 : 1;   // 属性を引き継いだ分
+    return Math.round((basePrice(base) * RARITY[rarityOf(it.effect)].price * eleBonus) / 10) * 10;
   }
   const sellPrice = (id) => Math.floor(itemPrice(id) / 20) * 10; // 買値の半分
   // 日替わりの品ぞろえ。同じ文字列（日付＋家族）なら、いつ開いても同じ3つ。固有の強い装備は並ばない
@@ -432,7 +474,7 @@
     ATTRS, ATTR_OF_KEY, affinity, isValidJan, checkDigit, prefixKind, identityKey, kirakiraOf, kkRank, KK, decode, describeItem, randomCode, barBits,
     MAX_LV, LOT_STEP, xpForLevel, levelFromXp, maxLevelOf, statsAt,
     HP_SCALE, SP_COOLDOWN, makeFighter, initiative, hitChance, rollHit, elementMult, calcDamage, specialDamage, tryInflict, startTurn,
-    RARITY, rarityOf, TRAITS, traitMult, traitNames, beginAttack, guts, afterHit, onBlock, onSwitchIn, endTurnTraits, spCooldown, itemIndexOf,
+    RARITY, RARITY_ORDER, rarityOf, parseItemId, synthPick, withElement, itemKind, TRAITS, traitMult, traitNames, beginAttack, guts, afterHit, onBlock, onSwitchIn, endTurnTraits, spCooldown, itemIndexOf,
     healAmount, powerHeal, useConsumable, fatigue, rewardMoney, rollDrop, itemById, itemPrice, sellPrice, shopStock, hashStr, seeded, stickerDec, specOf, fighterFromSpec, DATA, COLLAB, setCollab, setCollabCodes, addCollabCode,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
