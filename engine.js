@@ -161,7 +161,8 @@
   // ---- 戦闘 ----
   const HP_SCALE = 10; // HPの能力値 × 10 が体力の合計
   // 戦闘用の個体。item はアイテム(decode結果)か null
-  function makeFighter(dec, item, level) {
+  // boost は、会社の株価による補正 { st, df, dx, herb }（%）。無ければ補正なし
+  function makeFighter(dec, item, level, boost) {
     level = level || 1;
     const st = statsAt(dec, level);
     const e = item ? item.effect : null;
@@ -177,6 +178,10 @@
       f.inflict = e.inflict || {}; f.resist = e.resist || {}; f.immune = e.immune || [];
     } else if (e && e.kind === 'consumable') {
       f.consumable = e;
+    }
+    if (boost) {   // 株価の補正（装備のあとにかける。1未満にはならない）
+      for (const k of ['st', 'df', 'dx']) if (boost[k]) st[k] = Math.max(1, Math.round(st[k] * (1 + boost[k] / 100)));
+      f.boost = boost; f.herbBoost = boost.herb || 0;
     }
     f.st = st.st; f.df = st.df; f.dx = st.dx; f.sp = st.sp;
     f.maxHp = st.hp * HP_SCALE; f.hp = f.maxHp;
@@ -239,11 +244,11 @@
   const fatigue = (round) => (round <= 20 ? 1 : 1 + (round - 20) * 0.15);
 
   // 薬草 n 個の回復（1個=最大HPの20%）
-  function healAmount(f, n) { return Math.min(f.maxHp - f.hp, Math.round((f.maxHp * n * 2) / 10 * (f.trait === 'brave' ? 1.5 : 1))); }
+  function healAmount(f, n) { return Math.min(f.maxHp - f.hp, Math.round((f.maxHp * n * 2) / 10 * (f.trait === 'brave' ? 1.5 : 1) * (1 + (f.herbBoost || 0) / 100))); }
   // パワーキー：薬草1個。乱数(1,2,3,5,7)とタイミング(1〜1.4)で最大HPの10〜98%
   function powerHeal(f, timing, rng) {
     const r = [1, 2, 3, 5, 7][Math.floor(rng() * 5)];
-    const v = (f.maxHp * r * Math.min(1.4, Math.max(1, timing))) / 10 * (f.trait === 'brave' ? 1.5 : 1);
+    const v = (f.maxHp * r * Math.min(1.4, Math.max(1, timing))) / 10 * (f.trait === 'brave' ? 1.5 : 1) * (1 + (f.herbBoost || 0) / 100);
     return { amount: Math.min(f.maxHp - f.hp, Math.round(v)), r };
   }
   // 消耗品アイテムを使う（1回だけ）

@@ -260,7 +260,14 @@
     if (preview) makeSticker(preview).then((c) => { const box = $('stk' + cap); if (box && s.dec === preview) box.appendChild(c); });
   }
   // 戦士を手に入れた（スキャン・ランダム・入力の確定）ときに、すぐ図鑑へ登録する／別ロットなら限界Lvを上げる
+  // スキャン・数字入力で戦士を手に入れたとき：会社が登録ずみなら そのまま結びつく（コードの先頭で自動）。未登録なら、その場で会社を登録する
+  async function acquireScanned(kind, code, collab) {
+    Company.logScan(code);
+    await acquire(kind, code, collab);
+    if (kind === 'char' && !collab && /^(45|49)/.test(code) && !Company.lookup(code)) await openCompany(code, true);
+  }
   async function acquire(kind, code, collab) {
+    if (kind === 'company') { await openCompany(code); return; }
     setSlot(kind, code, collab);
     const s = slots[kind];
     if (kind === 'item') { // 書籍：持ち物に入れる（同じバーコードは1回だけ）
@@ -367,6 +374,107 @@
   document.querySelectorAll('[data-bag]').forEach((b) => b.onclick = openBag);
   document.querySelectorAll('[data-lib]').forEach((b) => b.onclick = openLib);
   document.querySelectorAll('[data-scan]').forEach((b) => b.onclick = () => openScan(b.dataset.scan));
+  // ---- 会社しらべ：JANコード → 会社の対応表（company.js）。未登録なら、コードをコピーして Verified by GS1 で調べ、手で登録する ----
+  const GS1_URL = 'https://www.gs1.org/services/verified-by-gs1';
+  const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  async function copyText(t) { try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; } }
+  Company.loadSeed(); Company.loadPrices();
+  // 株価カード：前日比→きょうの調子、1か月の変化→勢い。株安は「おやすみ中」とやさしく言う
+  function sparkSvg(a) {
+    const mn = Math.min(...a), mx = Math.max(...a), w = 240, h = 48, d = mx - mn || 1;
+    const pts = a.map((v, i) => `${(i / (a.length - 1) * w).toFixed(1)},${(h - 4 - (v - mn) / d * (h - 8)).toFixed(1)}`).join(' ');
+    const up = a[a.length - 1] >= a[0];
+    return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" style="display:block"><polyline points="${pts}" fill="none" stroke="${up ? '#e5484d' : '#3b82f6'}" stroke-width="2" stroke-linejoin="round"/></svg>`;
+  }
+  const mood = (c) => (c >= 3 ? '🔥 とってもげんき' : c > 0.3 ? '😊 げんき' : c >= -0.3 ? '😐 ふつう' : c > -3 ? '😴 ちょっとおやすみ' : '🛌 ぐっすりおやすみ中');
+  function priceCardHtml(c) {
+    if (!c.ticker) return '<div class="small" style="margin-bottom:8px">この会社は 上場していない（または証券コードが ない）ので、株価はありません</div>';
+    const p = Company.price(c.ticker);
+    if (!p) return `<div class="small" style="margin-bottom:8px">株価データが まだありません（<b>python tools/fetch_prices.py ${escHtml(c.ticker)}</b> を実行）</div>`;
+    const sg = (n) => (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+    return `<div class="info" style="margin-bottom:8px">📈 かぶか <b>${p.close.toLocaleString()}円</b>（${escHtml(p.asOf)}）${sparkSvg(p.spark)}
+      <div class="small" style="line-height:1.7">きのうより <b>${sg(p.changePct)}</b> → きょうの調子：${mood(p.changePct)}<br>
+      1か月で <b>${sg(p.trend1mPct)}</b>　はいとう ${p.divYieldPct}%（1年）<br>
+      <span style="color:var(--dim)">※ ゲームのなかの ぎじ体験です。かぶを買う すすめではありません</span></div></div>`;
+  }
+  async function openCompany(jan, fromChar) {
+    const copied = await copyText(jan);                 // スキャン直後は許可されないことがある。その場合は下の「コピー」ボタンを使う
+    const hit = Company.lookup(jan), jp = /^(45|49)/.test(jan);
+    const head = `<h2 style="margin:0 0 8px;font-size:16px">🏢 会社しらべ</h2><p style="margin:0 0 8px;font-size:18px;letter-spacing:2px"><b>${jan}</b></p>`;
+    const found = hit
+      ? `<div class="info" style="margin-bottom:8px">この商品は <b>${escHtml(hit.name)}</b> の商品です<br><span class="small">${hit.ticker ? '証券コード ' + escHtml(hit.ticker) : '上場していない（または未登録）'}　業種：${escHtml(hit.sector)}　（コード ${hit.prefix}）</span></div>${priceCardHtml(hit)}`
+      : (jp ? `<div class="warn" style="margin-bottom:8px;display:block">${fromChar ? '🆕 この戦士の会社は まだ とうろくされていません。とうろくすると、この戦士に 会社の株価が つながります。' : 'まだ会社が とうろくされていません。'}①コピー ②GS1で しらべる ③下に会社名を いれて とうろく</div>`
+        : '<div class="warn" style="margin-bottom:8px;display:block">日本の商品（先頭45・49）以外は、会社の対応表に 登録できません</div>');
+    const form = !jp ? '' : `<div class="row" style="margin-bottom:8px"><button id="cpCopy">📋 ${copied ? 'コピーしました' : 'JANをコピー'}</button><button id="cpGs1" class="pri">🔎 Verified by GS1 をひらく</button></div>
+      <div class="small" style="margin:4px 0">${hit ? 'まちがえていたら、なおせます' : 'GS1のページで JANを ペーストして、「会社名」をしらべます'}</div>
+      <div class="row" style="margin-bottom:6px"><input type="text" id="cpName" placeholder="会社名（例：〇〇株式会社）" value="${hit ? escHtml(hit.name) : ''}" style="flex:1;min-width:0"></div>
+      <div class="row" style="margin-bottom:6px"><input type="text" id="cpTicker" maxlength="4" placeholder="証券コード（4けた・上場していなければ空）" value="${hit ? escHtml(hit.ticker || '') : ''}" style="flex:1;min-width:0"></div>
+      <div class="row" style="margin-bottom:6px"><select id="cpSector" style="flex:1;min-width:0">${Company.SECTORS.map((s) => `<option${hit && hit.sector === s ? ' selected' : ''}>${s}</option>`).join('')}</select>
+        <select id="cpLen" style="flex:none"><option value="7">事業者コード7けた</option><option value="9"${hit && hit.prefix.length === 9 ? ' selected' : ''}>9けた</option></select></div>
+      <div class="small" id="cpMsg" style="margin-bottom:6px"></div>
+      <div class="row"><button id="cpSave" class="pri">💾 とうろく</button></div>`;
+    modal(head + found + form + '<div class="row" style="margin-top:8px"><button id="cpClose">とじる</button></div>');
+    $('cpClose').onclick = closeModal;
+    if (!jp) return;
+    $('cpCopy').onclick = async () => { $('cpCopy').textContent = (await copyText(jan)) ? '📋 コピーしました' : '📋 コピーできません（長押しでコピー）'; };
+    $('cpGs1').onclick = () => window.open(GS1_URL, '_blank', 'noopener');
+    $('cpSave').onclick = async () => {
+      const name = $('cpName').value.trim(), ticker = $('cpTicker').value.toUpperCase().replace(/[^0-9A-Z]/g, '');
+      if (!name) { $('cpMsg').textContent = '会社名を いれてください'; return; }
+      if (ticker && !/^\d{3}[0-9A-Z]$/.test(ticker)) { $('cpMsg').textContent = '証券コードは4けたです（上場していなければ空に）'; return; }
+      const p = Company.save(jan, +$('cpLen').value, { name, ticker, sector: $('cpSector').value });
+      if (!p) { $('cpMsg').textContent = '保存できませんでした'; return; }
+      $('cpSave').disabled = true; $('cpMsg').textContent = '📈 株価を とりにいっています…（数秒）';
+      if (await Company.syncToServer() && ticker && !Company.price(ticker)) await Company.fetchPricesNow([ticker]);   // 開発用サーバーのときだけ。無ければ何もしない
+      openCompany(jan);
+    };
+  }
+  async function openCompanyList() {
+    const l = Company.list();
+    const opts = l.length ? l.map((c) => ({ label: `<b>${escHtml(c.name)}</b>${Company.price(c.ticker) ? ' ' + mood(Company.price(c.ticker).changePct) : ''}<div class="small">${c.ticker ? '証券コード ' + escHtml(c.ticker) + '　' : ''}業種：${escHtml(c.sector)}　コード ${c.prefix}　👉 タップで株価</div>`, value: 'c:' + c.prefix }))
+      : [{ label: 'まだ とうろくがありません。商品を スキャンして しらべましょう', value: 0, disabled: true }];
+    opts.push({ label: '📤 書き出す（JSONをコピー）', value: 'out' }, { label: '📥 取り込む（書き出したJSONを貼る）', value: 'in' });
+    const act = await choose(`とうろくした会社（${l.length}）`, opts, { back: { value: 0 } });
+    if (typeof act === 'string' && act.startsWith('c:')) {
+      const c = l.find((x) => x.prefix === act.slice(2));
+      const upd = Company.pricesUpdated();
+      await choose(escHtml(c.name), [{ label: `<div class="small" style="margin-bottom:6px">業種：${escHtml(c.sector)}　コード ${c.prefix}${upd ? '　株価の更新：' + escHtml(upd) : ''}</div>${priceCardHtml(c)}`, value: 0 }], { back: { value: 0 } });
+    } else if (act === 'out') {
+      const ok = await copyText(Company.exportJson());
+      await choose('書き出し', [{ label: ok ? 'JSONを コピーしました。companies.json に貼りつけてください' : 'コピーできませんでした', value: 0 }]);
+    } else if (act === 'in') {
+      const t = window.prompt('書き出したJSONを貼ってください', '');
+      if (t) { let msg; try { msg = Company.importJson(t) + '件 とりこみました'; } catch (e) { msg = 'JSONを読めませんでした'; } await choose('取り込み', [{ label: msg, value: 0 }]); }
+    } else return;
+    await openCompanyList();
+  }
+  $('btnCompanyList').onclick = openCompanyList;
+  // ---- 読んだJANコードの一覧：記録（会社しらべ・スキャン）＋ 図鑑の戦士 ＋ 手に入れた書籍。会社が未登録のものは、あとでGS1で調べる候補 ----
+  async function openJanList() {
+    const m = new Map();
+    const add = (jan, label, at) => { const e = m.get(jan) || { jan, labels: new Set(), at: 0 }; if (label) e.labels.add(label); e.at = Math.max(e.at, at || 0); m.set(jan, e); };
+    Company.scans().forEach((x) => add(x.jan, '', x.at));
+    Object.values(dex).forEach((e) => add(e.code, `戦士：${e.name}`, 0));
+    (player.itemCodes || []).forEach((c) => add(c, '書籍', 0));
+    const rows = [...m.values()].sort((a, b) => b.at - a.at).map((e) => {
+      const co = /^(45|49)/.test(e.jan) ? Company.lookup(e.jan) : null;
+      return { ...e, co, jp: /^(45|49)/.test(e.jan) };
+    });
+    const unreg = rows.filter((r) => r.jp && !r.co);
+    const text = (list) => list.map((r) => [r.jan, r.co ? r.co.name : '', [...r.labels].join('/')].join('\t')).join('\n');
+    const opts = rows.length ? rows.map((r) => ({
+      label: `<b>${r.jan}</b>${r.co ? ' 🏢 ' + escHtml(r.co.name) : r.jp ? ' ❓会社みとうろく' : ''}<div class="small">${[...r.labels].map(escHtml).join('・')}${r.at ? '　' + new Date(r.at).toLocaleDateString('ja-JP') : ''}</div>`,
+      value: 'j:' + r.jan })) : [{ label: 'まだ きろくがありません', value: 0, disabled: true }];
+    opts.push({ label: `📋 ぜんぶコピー（${rows.length}件・タブ区切り）`, value: 'all' }, { label: `📋 会社みとうろくだけコピー（${unreg.length}件）`, value: 'unreg' });
+    const act = await choose(`読んだJANコード（${rows.length}）`, opts, { back: { value: 0 } });
+    if (!act) return;
+    if (act === 'all' || act === 'unreg') {
+      const ok = await copyText(text(act === 'all' ? rows : unreg));
+      await choose('コピー', [{ label: ok ? 'コピーしました。メモや表計算に貼れます' : 'コピーできませんでした', value: 0 }]);
+    } else if (act.startsWith('j:')) { await openCompany(act.slice(2)); return; }
+    await openJanList();
+  }
+  $('btnJanList').onclick = openJanList;
   // ---- コラボスキャン：合言葉で開く「コラボキャラ」。読み取りのルールは、通常のスキャンと同じ ----
   async function ensureCollab() {
     if (BB.COLLAB.ready) return true;
@@ -449,7 +557,7 @@
       if (v.videoWidth) {
         const [rx, ry, rw, rh, rot] = REGIONS[n % REGIONS.length]; n++;
         const raw = await decodeRegion(v, v.videoWidth, v.videoHeight, rx, ry, rw, rh, reader, cv, ctx, rot);
-        if (raw && scanning) { closeScan(); acquire(kind, raw, scanCollab); return; }
+        if (raw && scanning) { closeScan(); acquireScanned(kind, raw, scanCollab); return; }
         if (Date.now() - since > 12000) { since = Date.now(); $('scanMsg').textContent = 'うまく読めないときは：明るくする／ライトをつける／少し離す（10〜20cm）／下の「写真で読む」をためす'; }
       }
       await sleep(60);
@@ -468,7 +576,7 @@
       const tries = [[0, 0, 1, 1, false], [0.04, 0.3, 0.92, 0.4, false], [0.02, 0.18, 0.96, 0.64, false], [0, 0, 1, 1, true], [0.3, 0.04, 0.4, 0.92, true], [0.1, 0.1, 0.8, 0.8, false], [0, 0.25, 1, 0.5, false], [0, 0.4, 1, 0.3, false]];
       for (const [rx, ry, rw, rh, rot] of tries) {
         const raw = await decodeRegion(img, W, H, rx, ry, rw, rh, reader, cv, ctx, rot);
-        if (raw) { URL.revokeObjectURL(url); closeScan(); acquire(kind, raw, scanCollab); return; }
+        if (raw) { URL.revokeObjectURL(url); closeScan(); acquireScanned(kind, raw, scanCollab); return; }
       }
       URL.revokeObjectURL(url);
       $('scanMsg').textContent = '写真から読み取れませんでした。バーコード全体が大きく写り、ピントが合うように撮りなおしてください';
@@ -527,7 +635,7 @@
     if (scanKind === 'char' && k !== 'char') { $('scanMsg').textContent = '戦士には、先頭が45か49の商品のバーコードを入れてください'; return; }
     if (scanKind === 'item' && k !== 'item') { $('scanMsg').textContent = 'アイテムには、先頭が9784の書籍のバーコードを入れてください'; return; }
     const kind = scanKind, collab = scanCollab;
-    closeScan(); await acquire(kind, v, collab);
+    closeScan(); await acquireScanned(kind, v, collab);
   }
   $('scanGo').onclick = submitScanInput;
   $('scanInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitScanInput(); } });
@@ -589,7 +697,7 @@
   // パーティ編成の枠の中に出す、小さなステータスバー
   // 装備ありの能力（hp,st,df,dx,sp）と、装備による増減
   function statsWithItem(e, itemId) {
-    const f = (item) => { const m = BB.makeFighter(BB.decode(e.code), item, e.level); return { hp: m.maxHp / BB.HP_SCALE, st: m.st, df: m.df, dx: m.dx, sp: m.sp }; };
+    const f = (item) => { const m = BB.makeFighter(BB.decode(e.code), item, e.level, Company.boostFor(e.code)); return { hp: m.maxHp / BB.HP_SCALE, st: m.st, df: m.df, dx: m.dx, sp: m.sp }; };
     const base = f(null), cur = itemId ? f(BB.itemById(itemId)) : base;
     const sum = (o) => Object.values(o).reduce((s, y) => s + Math.round(y), 0);
     return { base, cur, total: sum(base), delta: sum(cur) - sum(base) };
@@ -739,6 +847,8 @@
       const note = capped ? (de.maxLv < BB.MAX_LV ? `限界Lv${de.maxLv}に到達（同じキャラ・属性のバーコードで限界+${BB.LOT_STEP}）` : `最大Lv${BB.MAX_LV}に到達`) : `Lv${de.level + 1}まで あと ${need - into}（${into}/${need}）`;
       xpRow = `<div class="dbar"><span class="dn t">経験</span><div class="dtrack xp"><div style="width:${pct}%"></div></div><b>${capped ? 'MAX' : pct + '%'}</b></div><div class="small">経験値 ${de.xp}　${note}</div>`;
     }
+    const bs = f.boost, sgn = (n) => (n > 0 ? '+' : '') + n + '%';
+    const co = bs ? `<div class="small" style="margin-top:6px">🏢 <b>${escHtml(bs.company)}</b>（${escHtml(bs.sector)}）${bs.changePct === null ? '：株価の補正はありません' : `：${mood(bs.changePct)}<br>こうげき・ぼうぎょ ${sgn(bs.st)}　すばやさ ${sgn(bs.dx)}　やくそう回復 ${sgn(bs.herb)}（ぎじ体験の補正です）`}</div>` : '<div class="small" style="margin-top:6px">🏢 会社がわかっていません（ホームの「会社しらべ」で とうろく）</div>';
     const item = f.item ? `<div class="small" style="margin-top:6px">🎁 <b>${f.item.name}</b> ${rarTag(f.item)}：${f.item.text}</div>` : '<div class="small" style="margin-top:6px">🎁 アイテムなし</div>';
     const atk = f.atkAttr !== f.attr ? `／攻撃の属性は${BB.ATTRS[f.atkAttr].name}` : '', body = f.bodyAttr !== f.attr ? `／体の属性は${BB.ATTRS[f.bodyAttr].name}` : '';
     let aff = '';
@@ -749,7 +859,7 @@
     return `<div class="dhead"><div class="dstk"></div><div><div class="nm">${A.emoji} ${f.name}</div>
       <div class="small">${f.role}　${f.type}</div><div class="small">${A.name}属性${atk}${body}　✨${f.kirakira.name}</div>
       <div class="small">Lv${f.level} / 限界Lv${dex[f.code] ? dex[f.code].maxLv : f.limit}</div></div></div>
-      ${opts.noBars ? '' : bars + `<div class="small">体力 ${f.maxHp}（❤️ × ${BB.HP_SCALE}）</div>`}${xpRow}${item}${aff}${opts.story ? storyHtml(f) : ''}`;
+      ${opts.noBars ? '' : bars + `<div class="small">体力 ${f.maxHp}（❤️ × ${BB.HP_SCALE}）</div>`}${xpRow}${co}${item}${aff}${opts.story ? storyHtml(f) : ''}`;
   }
   // キャラの「とくちょう」と「ものがたり」（stories.js）
   function storyHtml(f) {
@@ -763,7 +873,7 @@
   }
   function showDetailModal(code) {
     const id = player.party.items[code];
-    const f = BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level);
+    const f = BB.makeFighter(BB.decode(code), id ? BB.itemById(id) : null, dex[code].level, Company.boostFor(code));
     modal('<div id="dmBox"></div><button class="pri" style="width:100%;margin-top:10px" onclick="document.getElementById(\'modalMask\').classList.remove(\'on\')">閉じる</button>');
     fillDetail($('dmBox'), f, null, { noBars: true, story: true });
   }
@@ -783,7 +893,7 @@
     const id = player.party.items[code];
     let item = id ? BB.itemById(id) : null;
     if (item && item.effect.kind === 'consumable' && match && match.usedMine.includes(id)) item = null; // 3本勝負：使い切りは使ったまま
-    const f = BB.makeFighter(BB.decode(code), item, dex[code].level);
+    const f = BB.makeFighter(BB.decode(code), item, dex[code].level, pvp ? null : Company.boostFor(code));   // 通信対戦は、端末ごとに株価がちがうので補正しない
     if (canvasCache[code]) f.canvas = canvasCache[code];
     return f;
   }
@@ -992,6 +1102,11 @@
     clearInterval(pickTimer);
     const foeSel = Battle.cpuSelect(foeParty, myParty, PICK);
     const mineList = picked.map((i) => myParty[i]), foeList = foeSel.map((i) => foeParty[i]);
+    const sb = Company.sectorBonus(mineList.map((f) => f.boost || null));   // 業種ばらばらボーナス：全能力+5%
+    if (sb) {
+      mineList.forEach((f) => { for (const k of ['st', 'df', 'dx', 'sp']) f[k] = Math.round(f[k] * (1 + sb / 100)); f.maxHp = Math.round(f.maxHp * (1 + sb / 100)); f.hp = f.maxHp; });
+      await choose('🏢 業種ばらばらボーナス！', [{ label: `${mineList.map((f) => escHtml(f.boost.sector)).join('・')}<br>ちがう業種の会社を そろえたので、ぜんぶの能力が +${sb}% ！<div class="small">いろいろな会社に わけて持つと リスクが へる、「ぶんさん」の考え方です</div>`, value: 0 }]);
+    }
     await revealSelections(mineList, foeList, match.multi ? 2 : 1);
     const winner = await (match.multi ? runMultiBattle(mineList, foeList) : runBattle(mineList, foeList));
     if (winner === 'giveup') { await giveUpMatch(); return; }
